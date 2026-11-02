@@ -1,48 +1,154 @@
-# PIA-Data-Center-Bateries-Administratrion
-# SmartGrid UPS Flow: Control de Flujo de Potencia y Balance de Baterías
+# PIA: Administración de baterías de un centro de datos
 
-Sistema para calcular el consumo y almacenamiento neto de energía en las baterías de respaldo (UPS) de un centro de datos. Analiza cómo cambia la potencia a lo largo del tiempo, manejando tanto el consumo eléctrico como la recarga de las baterías (valores positivos y negativos).
+Programa de línea de comandos en Python que estima el cambio neto de energía de
+las baterías de respaldo (UPS) de un centro de datos a partir de mediciones de
+potencia.
 
----
+## Descripción
 
-## 🏗️ Estructura del Proceso
+El programa solicita al usuario al menos dos mediciones de potencia, cada una
+asociada a una hora del día (0-23):
 
-El programa realiza el cálculo en dos pasos consecutivos mediante métodos numéricos:
+- **Potencia positiva:** la red carga las baterías (entrada).
+- **Potencia negativa:** las baterías se descargan (salida).
 
-1. **Obtención de la Función de Potencia ($f(t)$):**
-   * Se recopilan 3 mediciones reales de los sensores de potencia en kilovatios ($\text{kW}$):
-     * **Valores positivos ($+$):** La red eléctrica alimenta el centro de datos o carga las baterías.
-     * **Valores negativos ($-$):** Las baterías se están descargando para mantener el servidor activo.
-   * Con estos puntos se arma un sistema de ecuaciones $3 \times 3$ de la forma $f(t) = at^2 + bt + c$.
-   * Se resuelve el sistema usando el **Método de Montante**, obteniendo los coeficientes exactos de la función sin arrastrar errores de punto flotante ni fracciones complejas.
+Con los puntos `(hora, potencia)` se ajusta un polinomio que pasa exactamente
+por todas las mediciones:
 
-2. **Cálculo del Balance Neto de Energía (Integración Numérica):**
-   * Con la función $f(t)$ definida, se calcula la energía total acumulada en un intervalo de tiempo $[t_1, t_2]$:
-     $$\text{Energía Neta} = \int_{t_1}^{t_2} f(t) \, dt$$
-   * Se aplica la **Regla de Simpson 1/3** (o Trapecio) para calcular el área bajo la curva. Los periodos de carga (área positiva) suman energía y los de descarga (área negativa) la restan de forma automática, entregando el balance final en $\text{kWh}$.
+| Mediciones | Función ajustada |
+| ---------- | ---------------- |
+| 2          | lineal           |
+| 3          | cuadrática       |
+| n          | grado n - 1      |
 
----
+Los coeficientes se calculan resolviendo el sistema de Vandermonde con el
+**método de Montante** del Proyecto 1, usando aritmética exacta con
+`Fraction`.
 
-## 🛠️ Métodos Utilizados
-* **Lenguaje:** Python 3.x
-* **Álgebra Lineal:** Método de Montante (resolución exacta de matrices $3 \times 3$).
-* **Cálculo Numérico:** Regla de Simpson 1/3 (integración definida con signos mixtos).
+Después se integra la función de potencia `f(t)` de 0 a 24 horas con la
+**regla compuesta del trapecio**. El usuario elige el número de trapecios: a
+mayor cantidad, mejor es la estimación. La energía neta obtenida es el cambio
+respecto a la carga inicial de la batería (desconocida):
 
----
+- **Resultado positivo:** la batería terminó con más carga.
+- **Resultado negativo:** la batería terminó con menos carga.
+- **Resultado cero:** la carga final es igual a la inicial.
 
-## 🚀 Ejemplo de Uso
+## Requisitos
 
-```python
-from smartgrid_ups import UPSFlowModel
+- Python 3.8 o superior (desarrollado en Python 3.14).
+- No requiere dependencias externas.
 
-# 1. Datos de los sensores: (tiempo en horas, potencia en kW)
-# 40 kW cargando a las 2h, -25 kW descargando a las 6h, 10 kW cargando a las 10h
-puntos = [(2, 40.0), (6, -25.0), (10, 10.0)]
+## Ejecución
 
-# 2. Obtener la ecuación cuadrática con Montante
-modelo = UPSFlowModel(puntos)
-funcion_potencia = modelo.resolver_montante()
+```bash
+# Opción 1: usar el script de ejecución
+bash exec.sh
 
-# 3. Calcular la energía neta entre t = 0 y t = 12 horas con Simpson 1/3
-energia_neta = modelo.calcular_integral(t_inicio=0, t_fin=12, metodo="simpson_13")
-print(f"Balance neto de energía: {energia_neta} kWh")
+# Opción 2: ejecutar directamente
+python3 src/main.py
+```
+
+## Estructura del proyecto
+
+```
+.
+├── exec.sh                         # Script de ejecución
+├── README.md
+├── .gitignore
+└── src/
+    ├── main.py                     # Punto de entrada
+    └── modules/
+        ├── __init__.py             # Paquete
+        ├── ajuste.py               # Sistema de Vandermonde y polinomio
+        ├── integracion.py          # Regla compuesta del trapecio
+        ├── menu.py                 # Menú interactivo
+        ├── montante.py             # Método de Montante (reutilizado)
+        └── utils.py                # Entrada, formato y consola (reutilizado)
+```
+
+## Uso
+
+Al ejecutar el programa se muestra el menú:
+
+```
+1) Calcular balance de energía del día
+2) Salir
+```
+
+La opción 1 solicita:
+
+1. La cantidad de mediciones (mínimo 2).
+2. Para cada medición, la hora (entero entre 0 y 23) y la potencia en kW.
+   No se permiten dos mediciones en la misma hora.
+3. La cantidad de trapecios para la integración.
+
+El programa muestra:
+
+- La matriz aumentada del sistema de Vandermonde.
+- Los coeficientes exactos y aproximados del polinomio.
+- La función ajustada en términos de `t` (hora).
+- La energía neta del día en kWh y la interpretación del balance.
+
+## Ejemplo
+
+Mediciones: 10 kW a las 0 h y -5 kW a las 12 h. Trapecios: 6.
+
+```
+Función de potencia ajustada:
+  f(t) = -(5/4)t + 10
+
+Integración con la regla del trapecio:
+  Intervalo: 0 a 24 h
+  Trapecios: 6
+  Δt = 4 h
+  Energía neta = -120 kWh ≈ -120 kWh
+
+Interpretación del balance:
+  La batería terminó con 120 kWh menos que su carga inicial (predominó la descarga).
+```
+
+En este caso la función es lineal, por lo que la regla del trapecio obtiene el
+valor exacto de la integral:
+
+```
+∫₀²⁴ (10 - 5t/4) dt = -120 kWh
+```
+
+## Métodos
+
+### Ajuste polinomial
+
+Para `n` mediciones `(t_i, p_i)` se plantea el sistema de Vandermonde:
+
+```
+a0 + a1·t_i + a2·t_i² + ... + a(n-1)·t_i^(n-1) = p_i    para i = 1..n
+```
+
+La matriz de coeficientes y el vector de términos independientes se resuelven
+con `resolver_sistema` del módulo `montante.py`. Al tener todas las horas
+distintas, el sistema tiene solución única y el polinomio pasa por todos los
+puntos.
+
+### Regla del trapecio
+
+Para `n` trapecios en el intervalo `[a, b]`:
+
+```
+h = (b - a) / n
+
+∫ₐᵇ f(t) dt ≈ (h / 2) · [f(a) + 2·f(a + h) + ... + 2·f(b - h) + f(b)]
+```
+
+La integral se evalúa en el día completo `[0, 24]`; si las mediciones no cubren
+todo ese intervalo, el polinomio se extrapola para las horas sin medición.
+
+## Reutilización de proyectos anteriores
+
+- `modules/montante.py` conserva la implementación del método de Montante del
+  Proyecto 1 (`resolver_sistema`, `mostrar_matriz`, etc.).
+- `modules/utils.py` reutiliza las funciones de entrada, formato y control de
+  consola del Proyecto 1 (`leer_int`, `leer_fraccion`, `leer_opcion`,
+  `formatear_a_decimal`, `borrar_consola`, `pausar`).
+- `src/main.py` y `modules/__init__.py` siguen la misma estructura de entrada
+  usada en los proyectos anteriores.
