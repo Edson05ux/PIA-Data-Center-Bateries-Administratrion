@@ -1,45 +1,48 @@
 # PIA-Data-Center-Bateries-Administratrion
 # SmartGrid UPS Flow: Control de Flujo de Potencia y Balance de Baterías
 
-Software de análisis de infraestructura diseñado para automatizar el cálculo del balance neto de energía en sistemas de respaldo (UPS) de centros de datos, procesando registros de potencia variable (positivos y negativos) a lo largo del tiempo.
+Sistema para calcular el consumo y almacenamiento neto de energía en las baterías de respaldo (UPS) de un centro de datos. Analiza cómo cambia la potencia a lo largo del tiempo, manejando tanto el consumo eléctrico como la recarga de las baterías (valores positivos y negativos).
 
 ---
 
-## 🏗️ Arquitectura del Pipeline Numérico
+## 🏗️ Estructura del Proceso
 
-El sistema procesa la información en dos etapas secuenciales basadas en métodos numéricos exactos y eficientes:
+El programa realiza el cálculo en dos pasos consecutivos mediante métodos numéricos:
 
 1. **Obtención de la Función de Potencia ($f(t)$):**
-   * A partir de $n$ puntos de datos obtenidos por sensores de monitoreo de potencia neta en kilovatios ($\text{kW}$) —donde los valores positivos indican carga o consumo de red y los negativos indican descarga del banco de baterías—, se plantea un sistema de ecuaciones polinómicas.
-   * Se aplica el **Método de Montante** para resolver el sistema lineal de manera exacta, evitando errores de punto flotante y manejando con precisión coeficientes con valores mixtos.
+   * Se recopilan 3 mediciones reales de los sensores de potencia en kilovatios ($\text{kW}$):
+     * **Valores positivos ($+$):** La red eléctrica alimenta el centro de datos o carga las baterías.
+     * **Valores negativos ($-$):** Las baterías se están descargando para mantener el servidor activo.
+   * Con estos puntos se arma un sistema de ecuaciones $3 \times 3$ de la forma $f(t) = at^2 + bt + c$.
+   * Se resuelve el sistema usando el **Método de Montante**, obteniendo los coeficientes exactos de la función sin arrastrar errores de punto flotante ni fracciones complejas.
 
-2. **Cálculo Integral del Balance Neto de Energía:**
-   * Utilizando la función continua $f(t)$ obtenida en la fase anterior, se calcula el acumulado neto de energía en un intervalo de tiempo $[t_1, t_2]$:
+2. **Cálculo del Balance Neto de Energía (Integración Numérica):**
+   * Con la función $f(t)$ definida, se calcula la energía total acumulada en un intervalo de tiempo $[t_1, t_2]$:
      $$\text{Energía Neta} = \int_{t_1}^{t_2} f(t) \, dt$$
-   * Se implementan algoritmos de **Integración Numérica** (Regla del Trapecio o Simpson 1/3) para aproximar el área neta bajo la curva, integrando de forma natural los cambios de signo (las áreas superiores suman energía al sistema y las inferiores restan reservas).
+   * Se aplica la **Regla de Simpson 1/3** (o Trapecio) para calcular el área bajo la curva. Los periodos de carga (área positiva) suman energía y los de descarga (área negativa) la restan de forma automática, entregando el balance final en $\text{kWh}$.
 
 ---
 
-## 🛠️ Tecnologías y Métodos
+## 🛠️ Métodos Utilizados
 * **Lenguaje:** Python 3.x
-* **Matemática Aplicada:** Álgebra lineal exacta (Algoritmo de Montante) y cálculo numérico (Integración definida con signo).
-* **Paradigmas:** Programación modular orientada al análisis de infraestructura crítica.
+* **Álgebra Lineal:** Método de Montante (resolución exacta de matrices $3 \times 3$).
+* **Cálculo Numérico:** Regla de Simpson 1/3 (integración definida con signos mixtos).
 
 ---
 
-## 🚀 Uso Rápido
+## 🚀 Ejemplo de Uso
 
 ```python
-# Ejemplo de inicialización del pipeline analítico
 from smartgrid_ups import UPSFlowModel
 
-# 1. Cargar mediciones de sensores (tiempo en horas, potencia en kW - positivo/negativo)
+# 1. Datos de los sensores: (tiempo en horas, potencia en kW)
+# 40 kW cargando a las 2h, -25 kW descargando a las 6h, 10 kW cargando a las 10h
 puntos = [(2, 40.0), (6, -25.0), (10, 10.0)]
 
-# 2. Resolver coeficientes mediante el Método de Montante
+# 2. Obtener la ecuación cuadrática con Montante
 modelo = UPSFlowModel(puntos)
 funcion_potencia = modelo.resolver_montante()
 
-# 3. Calcular el balance neto de energía mediante integración numérica
-energia_neta = modelo.calcular_integral(t_inicio=0, t_end=12, metodo="simpson_13")
+# 3. Calcular la energía neta entre t = 0 y t = 12 horas con Simpson 1/3
+energia_neta = modelo.calcular_integral(t_inicio=0, t_fin=12, metodo="simpson_13")
 print(f"Balance neto de energía: {energia_neta} kWh")
