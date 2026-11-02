@@ -1,45 +1,16 @@
 # PIA-Data-Center-Bateries-Administratrion
-# CloudTraffic Analytics: Cálculo de Ancho de Banda y Transferencia de Datos
+SmartGrid UPS Analytics: Control de Flujo de Potencia y Balance Energético en Data CenterSoftware de análisis e infraestructura diseñado para calcular la ecuación del flujo de potencia continua y evaluar el balance energético neto en el sistema de almacenamiento de energía (UPS / Banco de Baterías) de un centro de datos.🏗️ Arquitectura del Pipeline NuméricoEl sistema procesa los registros de flujo eléctrico en dos etapas secuenciales basadas en métodos numéricos exactos:Obtención de la Función de Flujo de Potencia ($f(t)$):A partir de mediciones tomadas por sensores en instantes clave del día (potencia en $\text{kW}$ vs. tiempo en horas), se plantea un sistema de ecuaciones polinómicas mediante una matriz de Vandermonde.Se aplica el Método de Montante para resolver el sistema de ecuaciones de manera exacta con aritmética entera. Esto evita el arrastre de errores por punto flotante y procesa sin problemas valores mixtos:$f(t) > 0$ (Positivo): Red alimentando/cargando el sistema de baterías (Superávit).$f(t) < 0$ (Negativo): Baterías suministrando energía por picos de demanda o caída de red (Déficit/Descarga).Cálculo del Balance Neto de Energía ($\text{kWh}$):Utilizando la función polinómica $f(t)$ resultante, se determina el consumo o ganancia neta acumulada en un intervalo $[t_1, t_2]$ mediante integración definida:
+$$\text{Balance de Energía} = \int_{t_1}^{t_2} f(t) \, dt$$Se aplica Integración Numérica (Regla de Simpson 1/3 / Trapecio) para evaluar el área neta con signo, donde las zonas de descarga restan y las de carga suman automáticamente al balance total.🛠️ Tecnologías y MétodosLenguaje: Python 3.xÁlgebra Lineal: Algoritmo de Montante (Determinantes para matriz de Vandermonde).Cálculo Numérico: Regla de Simpson 1/3 Compuesta y Método del Trapecio.Dominio: Gestión de energía en TI y sistemas críticos.🚀 Uso Rápidofrom ups_analytics import UPSPowerModel
 
-Software de análisis e infraestructura diseñado para automatizar el cálculo del volumen de datos transferidos en servidores en la nube a partir de registros dispersos de velocidad[cite: 2].
+# 1. Cargar mediciones de los sensores: (tiempo en horas, potencia neta en kW)
+# Valores positivos = Carga, Valores negativos = Descarga
+mediciones = [(2, 40.0), (6, -25.0), (10, 10.0)]
 
----
+# 2. Obtener la ecuación continua f(t) mediante el Método de Montante
+modelo = UPSPowerModel(mediciones)
+coeficientes = modelo.resolver_montante()  # Devuelve a, b, c para f(t) = at² + bt + c
 
-## 🏗️ Arquitectura del Pipeline Numérico
+# 3. Calcular el balance neto de energía (kWh) en un rango mediante Integración Numérica
+energia_neta = modelo.calcular_integral(t_inicio=0, t_fin=12, metodo="simpson_13")
+print(f"Balance energético neto del periodo: {energia_neta:.2f} kWh")
 
-El sistema procesa la información en dos etapas secuenciales basadas en métodos numéricos exactos y eficientes:
-
-1. **Obtención de la Función de Tráfico ($f(t)$)[cite: 2]:**
-   * A partir de $n$ puntos de datos obtenidos por sensores de monitoreo de velocidad (Mbps) a lo largo del tiempo, se plantea un sistema de ecuaciones polinómicas (ajustado mediante una matriz de Vandermonde)[cite: 2].
-   * Se aplica el **Método de Montante** para resolver el sistema lineal de manera exacta, evitando errores de redondeo por punto flotante y manejando coeficientes con valores mixtos (positivos y negativos)[cite: 2].
-
-2. **Cálculo Integral del Volumen Total de Datos[cite: 2]:**
-   * Utilizando la función continua $f(t)$ obtenida en la fase anterior, se calcula el acumulado de transferencia de datos en un intervalo de tiempo $[t_1, t_2]$[cite: 2]:
-     $$\text{Total de Datos} = \int_{t_1}^{t_2} f(t) \, dt$$
-   * Se implementan algoritmos de **Integración Numérica** (Regla del Trapecio, Simpson 1/3 o Romberg) para aproximar el área bajo la curva de forma eficiente, integrando de manera nativa los cambios de signo en flujos netos positivos y negativos[cite: 2].
-
----
-
-## 🛠️ Tecnologías y Métodos
-* **Lenguaje:** Python 3.x
-* **Matemática Aplicada:** Álgebra lineal exacta (Algoritmo de Montante) y cálculo numérico (Integración definida).
-* **Paradigmas:** Programación modular orientada al procesamiento analítico de infraestructura.
-
----
-
-## 🚀 Uso Rápido
-
-```python
-# Ejemplo de inicialización del pipeline analítico
-from cloud_traffic import CloudTrafficModel
-
-# 1. Cargar mediciones de sensores (tiempo, velocidad en Mbps)
-puntos = [(0, 15.5), (4, -8.2), (8, 22.1)]
-
-# 2. Resolver coeficientes mediante el Método de Montante
-modelo = CloudTrafficModel(puntos)
-funcion_trafico = modelo.resolver_montante()
-
-# 3. Calcular la transferencia total en un intervalo de tiempo mediante integración numérica
-volumen_total = modelo.calcular_integral(t_inicio=0, t_end=12, metodo="simpson_13")
-print(f"Volumen total transferido: {volumen_total} GB")
