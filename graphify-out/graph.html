@@ -1,0 +1,474 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>graphify - graphify-out/graph.html</title>
+<script src="https://unpkg.com/vis-network@9.1.6/standalone/umd/vis-network.min.js"
+        integrity="sha384-Ux6phic9PEHJ38YtrijhkzyJ8yQlH8i/+buBR8s3mAZOJrP1gwyvAcIYl3GWtpX1"
+        crossorigin="anonymous"></script>
+<style>
+  :root {
+    --bg: #0f0f1a; --panel: #1a1a2e; --border: #2a2a4e; --input-border: #3a3a5e;
+    --text: #e0e0e0; --text-2: #aaa; --text-3: #ccc; --muted: #555; --count: #666;
+    --neighbor-border: #333; --node-label: #ffffff;
+  }
+  [data-theme="light"] {
+    --bg: #ffffff; --panel: #f8f9fa; --border: #d9dee5; --input-border: #c3cad4;
+    --text: #222222; --text-2: #666666; --text-3: #333333; --muted: #888888; --count: #777777;
+    --neighbor-border: #ccc; --node-label: #222222;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { background: var(--bg); color: var(--text); font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; display: flex; height: 100vh; overflow: hidden; }
+  #graph { flex: 1; }
+  #sidebar { width: 280px; background: var(--panel); border-left: 1px solid var(--border); display: flex; flex-direction: column; overflow: hidden; }
+  #search-wrap { padding: 12px; border-bottom: 1px solid var(--border); }
+  #search { width: 100%; background: var(--bg); border: 1px solid var(--input-border); color: var(--text); padding: 7px 10px; border-radius: 6px; font-size: 13px; outline: none; }
+  #search:focus { border-color: #4E79A7; }
+  #search-results { max-height: 140px; overflow-y: auto; padding: 4px 12px; border-bottom: 1px solid var(--border); display: none; }
+  .search-item { padding: 4px 6px; cursor: pointer; border-radius: 4px; font-size: 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .search-item:hover { background: var(--border); }
+  #info-panel { padding: 14px; border-bottom: 1px solid var(--border); min-height: 140px; }
+  #info-panel h3 { font-size: 13px; color: var(--text-2); margin-bottom: 8px; text-transform: uppercase; letter-spacing: 0.05em; }
+  #info-content { font-size: 13px; color: var(--text-3); line-height: 1.6; }
+  #info-content .field { margin-bottom: 5px; }
+  #info-content .field b { color: var(--text); }
+  #info-content .empty { color: var(--muted); font-style: italic; }
+  .neighbor-link { display: block; padding: 2px 6px; margin: 2px 0; border-radius: 3px; cursor: pointer; font-size: 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; border-left: 3px solid var(--neighbor-border); }
+  .neighbor-link:hover { background: var(--border); }
+  #neighbors-list { max-height: 160px; overflow-y: auto; margin-top: 4px; }
+  #legend-wrap { flex: 1; overflow-y: auto; padding: 12px; }
+  #legend-wrap h3 { font-size: 13px; color: var(--text-2); margin-bottom: 10px; text-transform: uppercase; letter-spacing: 0.05em; }
+  .legend-item { display: flex; align-items: center; gap: 8px; padding: 4px 0; cursor: pointer; border-radius: 4px; font-size: 12px; }
+  .legend-item:hover { background: var(--border); padding-left: 4px; }
+  .legend-item.dimmed { opacity: 0.35; }
+  .legend-dot { width: 12px; height: 12px; border-radius: 50%; flex-shrink: 0; }
+  .legend-label { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .legend-count { color: var(--count); font-size: 11px; }
+  #stats { padding: 10px 14px; border-top: 1px solid var(--border); font-size: 11px; color: var(--muted); }
+  #legend-controls { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; padding: 4px 0; }
+  #legend-controls label { display: flex; align-items: center; gap: 6px; cursor: pointer; font-size: 12px; color: var(--text-2); user-select: none; }
+  #legend-controls label:hover { color: var(--text); }
+  .legend-cb, #select-all-cb { appearance: none; -webkit-appearance: none; width: 14px; height: 14px; border: 1.5px solid var(--input-border); border-radius: 3px; background: var(--bg); cursor: pointer; position: relative; flex-shrink: 0; }
+  .legend-cb:checked, #select-all-cb:checked { background: #4E79A7; border-color: #4E79A7; }
+  .legend-cb:checked::after, #select-all-cb:checked::after { content: ''; position: absolute; left: 3.5px; top: 1px; width: 4px; height: 7px; border: solid #fff; border-width: 0 2px 2px 0; transform: rotate(45deg); }
+  #select-all-cb:indeterminate { background: #4E79A7; border-color: #4E79A7; }
+  #select-all-cb:indeterminate::after { content: ''; position: absolute; left: 2px; top: 5px; width: 8px; height: 2px; background: #fff; border: none; transform: none; }
+  #theme-wrap { display: flex; gap: 4px; padding: 8px 12px; border-bottom: 1px solid var(--border); }
+  #theme-wrap button { flex: 1; background: var(--bg); color: var(--text-2); border: 1px solid var(--input-border); border-radius: 4px; padding: 3px 0; font-size: 11px; cursor: pointer; }
+  #theme-wrap button:hover { color: var(--text); }
+  #theme-wrap button[aria-pressed="true"] { background: #4E79A7; border-color: #4E79A7; color: #fff; }
+</style>
+<script id="graphify-theme-init">
+// Apply the saved theme before first paint (#3894). No saved choice keeps the
+// historical dark look; "system" follows prefers-color-scheme.
+(function () {
+  var pref = null;
+  try { pref = localStorage.getItem('graphify-theme'); } catch (e) {}
+  var t = pref === 'light' ? 'light'
+    : pref === 'system' && window.matchMedia && window.matchMedia('(prefers-color-scheme: light)').matches ? 'light'
+    : 'dark';
+  document.documentElement.setAttribute('data-theme', t);
+})();
+</script>
+</head>
+<body>
+<div id="graph"></div>
+<div id="sidebar">
+  <div id="theme-wrap" role="group" aria-label="Theme">
+    <button type="button" data-theme-choice="light">Light</button>
+    <button type="button" data-theme-choice="dark">Dark</button>
+    <button type="button" data-theme-choice="system">System</button>
+  </div>
+  <div id="search-wrap">
+    <input id="search" type="text" placeholder="Search nodes..." autocomplete="off">
+    <div id="search-results"></div>
+  </div>
+  <div id="info-panel">
+    <h3>Node Info</h3>
+    <div id="info-content"><span class="empty">Click a node to inspect it</span></div>
+  </div>
+  <div id="legend-wrap">
+    <h3>Communities</h3>
+    <div id="legend-controls">
+      <label><input type="checkbox" id="select-all-cb" checked onchange="toggleAllCommunities(!this.checked)">Select All</label>
+    </div>
+    <div id="legend"></div>
+  </div>
+  <div id="stats">77 nodes &middot; 146 edges &middot; 8 communities</div>
+</div>
+<script>
+const RAW_NODES = [{"id": "src_modules_menu_run", "label": "run()", "color": {"background": "#4E79A7", "border": "#4E79A7", "highlight": {"background": "#ffffff", "border": "#4E79A7"}}, "size": 18.4, "font": {"size": 12, "color": "#ffffff"}, "title": "run()", "community": 0, "community_name": "Consola y utilidades de E/S", "source_file": "src/modules/menu.py", "file_type": "code", "degree": 7}, {"id": "src_modules_utils_borrar_consola", "label": "borrar_consola()", "color": {"background": "#4E79A7", "border": "#4E79A7", "highlight": {"background": "#ffffff", "border": "#4E79A7"}}, "size": 17.2, "font": {"size": 12, "color": "#ffffff"}, "title": "borrar_consola()", "community": 0, "community_name": "Consola y utilidades de E/S", "source_file": "src/modules/utils.py", "file_type": "code", "degree": 6}, {"id": "src_modules_utils_formatear_a_decimal", "label": "formatear_a_decimal()", "color": {"background": "#4E79A7", "border": "#4E79A7", "highlight": {"background": "#ffffff", "border": "#4E79A7"}}, "size": 16.0, "font": {"size": 12, "color": "#ffffff"}, "title": "formatear_a_decimal()", "community": 0, "community_name": "Consola y utilidades de E/S", "source_file": "src/modules/utils.py", "file_type": "code", "degree": 5}, {"id": "src_modules_utils_leer_opcion", "label": "leer_opcion()", "color": {"background": "#4E79A7", "border": "#4E79A7", "highlight": {"background": "#ffffff", "border": "#4E79A7"}}, "size": 17.2, "font": {"size": 12, "color": "#ffffff"}, "title": "leer_opcion()", "community": 0, "community_name": "Consola y utilidades de E/S", "source_file": "src/modules/utils.py", "file_type": "code", "degree": 6}, {"id": "src_modules_utils_pausar", "label": "pausar()", "color": {"background": "#4E79A7", "border": "#4E79A7", "highlight": {"background": "#ffffff", "border": "#4E79A7"}}, "size": 17.2, "font": {"size": 12, "color": "#ffffff"}, "title": "pausar()", "community": 0, "community_name": "Consola y utilidades de E/S", "source_file": "src/modules/utils.py", "file_type": "code", "degree": 6}, {"id": "src_modules_ajuste_construir_sistema", "label": "construir_sistema()", "color": {"background": "#F28E2B", "border": "#F28E2B", "highlight": {"background": "#ffffff", "border": "#F28E2B"}}, "size": 16.0, "font": {"size": 12, "color": "#ffffff"}, "title": "construir_sistema()", "community": 1, "community_name": "Interpolaci\u00f3n polinomial (Vandermonde)", "source_file": "src/modules/ajuste.py", "file_type": "code", "degree": 5}, {"id": "src_modules_ajuste_evaluar_polinomio", "label": "evaluar_polinomio()", "color": {"background": "#F28E2B", "border": "#F28E2B", "highlight": {"background": "#ffffff", "border": "#F28E2B"}}, "size": 16.0, "font": {"size": 12, "color": "#ffffff"}, "title": "evaluar_polinomio()", "community": 1, "community_name": "Interpolaci\u00f3n polinomial (Vandermonde)", "source_file": "src/modules/ajuste.py", "file_type": "code", "degree": 5}, {"id": "src_modules_ajuste_resolver_coeficientes", "label": "resolver_coeficientes()", "color": {"background": "#F28E2B", "border": "#F28E2B", "highlight": {"background": "#ffffff", "border": "#F28E2B"}}, "size": 18.4, "font": {"size": 12, "color": "#ffffff"}, "title": "resolver_coeficientes()", "community": 1, "community_name": "Interpolaci\u00f3n polinomial (Vandermonde)", "source_file": "src/modules/ajuste.py", "file_type": "code", "degree": 7}, {"id": "src_modules_menu_ejecutar_calculo", "label": "ejecutar_calculo()", "color": {"background": "#F28E2B", "border": "#F28E2B", "highlight": {"background": "#ffffff", "border": "#F28E2B"}}, "size": 23.2, "font": {"size": 12, "color": "#ffffff"}, "title": "ejecutar_calculo()", "community": 1, "community_name": "Interpolaci\u00f3n polinomial (Vandermonde)", "source_file": "src/modules/menu.py", "file_type": "code", "degree": 11}, {"id": "src_modules_montante_mostrar_matriz", "label": "mostrar_matriz()", "color": {"background": "#F28E2B", "border": "#F28E2B", "highlight": {"background": "#ffffff", "border": "#F28E2B"}}, "size": 16.0, "font": {"size": 12, "color": "#ffffff"}, "title": "mostrar_matriz()", "community": 1, "community_name": "Interpolaci\u00f3n polinomial (Vandermonde)", "source_file": "src/modules/montante.py", "file_type": "code", "degree": 5}, {"id": "src_modules_montante_copiar", "label": "_copiar()", "color": {"background": "#E15759", "border": "#E15759", "highlight": {"background": "#ffffff", "border": "#E15759"}}, "size": 14.8, "font": {"size": 12, "color": "#ffffff"}, "title": "_copiar()", "community": 2, "community_name": "M\u00e9todo de Montante", "source_file": "src/modules/montante.py", "file_type": "code", "degree": 4}, {"id": "src_modules_montante_determinante", "label": "determinante()", "color": {"background": "#E15759", "border": "#E15759", "highlight": {"background": "#ffffff", "border": "#E15759"}}, "size": 16.0, "font": {"size": 12, "color": "#ffffff"}, "title": "determinante()", "community": 2, "community_name": "M\u00e9todo de Montante", "source_file": "src/modules/montante.py", "file_type": "code", "degree": 5}, {"id": "src_modules_montante_eliminacion_montante", "label": "eliminacion_montante()", "color": {"background": "#E15759", "border": "#E15759", "highlight": {"background": "#ffffff", "border": "#E15759"}}, "size": 16.0, "font": {"size": 12, "color": "#ffffff"}, "title": "eliminacion_montante()", "community": 2, "community_name": "M\u00e9todo de Montante", "source_file": "src/modules/montante.py", "file_type": "code", "degree": 5}, {"id": "src_modules_montante_hallar_pivote", "label": "_hallar_pivote()", "color": {"background": "#E15759", "border": "#E15759", "highlight": {"background": "#ffffff", "border": "#E15759"}}, "size": 14.8, "font": {"size": 12, "color": "#ffffff"}, "title": "_hallar_pivote()", "community": 2, "community_name": "M\u00e9todo de Montante", "source_file": "src/modules/montante.py", "file_type": "code", "degree": 4}, {"id": "src_modules_montante_rango", "label": "rango()", "color": {"background": "#E15759", "border": "#E15759", "highlight": {"background": "#ffffff", "border": "#E15759"}}, "size": 14.8, "font": {"size": 12, "color": "#ffffff"}, "title": "rango()", "community": 2, "community_name": "M\u00e9todo de Montante", "source_file": "src/modules/montante.py", "file_type": "code", "degree": 4}, {"id": "src_modules_montante_resoluble", "label": "resoluble()", "color": {"background": "#E15759", "border": "#E15759", "highlight": {"background": "#ffffff", "border": "#E15759"}}, "size": 14.8, "font": {"size": 12, "color": "#ffffff"}, "title": "resoluble()", "community": 2, "community_name": "M\u00e9todo de Montante", "source_file": "src/modules/montante.py", "file_type": "code", "degree": 4}, {"id": "src_modules_montante_resolver_sistema", "label": "resolver_sistema()", "color": {"background": "#E15759", "border": "#E15759", "highlight": {"background": "#ffffff", "border": "#E15759"}}, "size": 18.4, "font": {"size": 12, "color": "#ffffff"}, "title": "resolver_sistema()", "community": 2, "community_name": "M\u00e9todo de Montante", "source_file": "src/modules/montante.py", "file_type": "code", "degree": 7}, {"id": "src_modules_integracion_regla_del_trapecio", "label": "regla_del_trapecio()", "color": {"background": "#76B7B2", "border": "#76B7B2", "highlight": {"background": "#ffffff", "border": "#76B7B2"}}, "size": 16.0, "font": {"size": 12, "color": "#ffffff"}, "title": "regla_del_trapecio()", "community": 3, "community_name": "Integraci\u00f3n por trapecios", "source_file": "src/modules/integracion.py", "file_type": "code", "degree": 5}, {"id": "src_modules_menu_leer_numero_trapecios", "label": "_leer_numero_trapecios()", "color": {"background": "#76B7B2", "border": "#76B7B2", "highlight": {"background": "#ffffff", "border": "#76B7B2"}}, "size": 16.0, "font": {"size": 12, "color": "#ffffff"}, "title": "_leer_numero_trapecios()", "community": 3, "community_name": "Integraci\u00f3n por trapecios", "source_file": "src/modules/menu.py", "file_type": "code", "degree": 5}, {"id": "src_modules_utils_leer_int", "label": "leer_int()", "color": {"background": "#76B7B2", "border": "#76B7B2", "highlight": {"background": "#ffffff", "border": "#76B7B2"}}, "size": 17.2, "font": {"size": 12, "color": "#ffffff"}, "title": "leer_int()", "community": 3, "community_name": "Integraci\u00f3n por trapecios", "source_file": "src/modules/utils.py", "file_type": "code", "degree": 6}, {"id": "src_modules_ajuste_formatear_polinomio", "label": "formatear_polinomio()", "color": {"background": "#59A14F", "border": "#59A14F", "highlight": {"background": "#ffffff", "border": "#59A14F"}}, "size": 16.0, "font": {"size": 12, "color": "#ffffff"}, "title": "formatear_polinomio()", "community": 4, "community_name": "Presentaci\u00f3n de resultados", "source_file": "src/modules/ajuste.py", "file_type": "code", "degree": 5}, {"id": "src_modules_menu_mostrar_resultados", "label": "_mostrar_resultados()", "color": {"background": "#59A14F", "border": "#59A14F", "highlight": {"background": "#ffffff", "border": "#59A14F"}}, "size": 18.4, "font": {"size": 12, "color": "#ffffff"}, "title": "_mostrar_resultados()", "community": 4, "community_name": "Presentaci\u00f3n de resultados", "source_file": "src/modules/menu.py", "file_type": "code", "degree": 7}, {"id": "src_modules_utils_formatear_a_fraccion", "label": "formatear_a_fraccion()", "color": {"background": "#59A14F", "border": "#59A14F", "highlight": {"background": "#ffffff", "border": "#59A14F"}}, "size": 20.8, "font": {"size": 12, "color": "#ffffff"}, "title": "formatear_a_fraccion()", "community": 4, "community_name": "Presentaci\u00f3n de resultados", "source_file": "src/modules/utils.py", "file_type": "code", "degree": 9}, {"id": "src_modules_menu_ingresar_mediciones", "label": "_ingresar_mediciones()", "color": {"background": "#EDC948", "border": "#EDC948", "highlight": {"background": "#ffffff", "border": "#EDC948"}}, "size": 18.4, "font": {"size": 12, "color": "#ffffff"}, "title": "_ingresar_mediciones()", "community": 5, "community_name": "Entrada de mediciones", "source_file": "src/modules/menu.py", "file_type": "code", "degree": 7}, {"id": "src_modules_utils_leer_fraccion", "label": "leer_fraccion()", "color": {"background": "#EDC948", "border": "#EDC948", "highlight": {"background": "#ffffff", "border": "#EDC948"}}, "size": 17.2, "font": {"size": 12, "color": "#ffffff"}, "title": "leer_fraccion()", "community": 5, "community_name": "Entrada de mediciones", "source_file": "src/modules/utils.py", "file_type": "code", "degree": 6}, {"id": "src_modules_utils_obtener_numero", "label": "_obtener_numero()", "color": {"background": "#EDC948", "border": "#EDC948", "highlight": {"background": "#ffffff", "border": "#EDC948"}}, "size": 13.6, "font": {"size": 0, "color": "#ffffff"}, "title": "_obtener_numero()", "community": 5, "community_name": "Entrada de mediciones", "source_file": "src/modules/utils.py", "file_type": "code", "degree": 3}, {"id": "src_modules_utils", "label": "utils.py", "color": {"background": "#4E79A7", "border": "#4E79A7", "highlight": {"background": "#ffffff", "border": "#4E79A7"}}, "size": 28.0, "font": {"size": 12, "color": "#ffffff"}, "title": "utils.py", "community": 0, "community_name": "Consola y utilidades de E/S", "source_file": "src/modules/utils.py", "file_type": "code", "degree": 15}, {"id": "src_modules_menu_rationale_132", "label": "M\u00e9todo principal para ejecutar el men\u00fa.", "color": {"background": "#4E79A7", "border": "#4E79A7", "highlight": {"background": "#ffffff", "border": "#4E79A7"}}, "size": 11.2, "font": {"size": 0, "color": "#ffffff"}, "title": "M\u00e9todo principal para ejecutar el men\u00fa.", "community": 0, "community_name": "Consola y utilidades de E/S", "source_file": "src/modules/menu.py", "file_type": "rationale", "degree": 1}, {"id": "src_modules_utils_rationale_59", "label": "Lee un entero dentro del rango cerrado [lower, upper].", "color": {"background": "#4E79A7", "border": "#4E79A7", "highlight": {"background": "#ffffff", "border": "#4E79A7"}}, "size": 11.2, "font": {"size": 0, "color": "#ffffff"}, "title": "Lee un entero dentro del rango cerrado [lower, upper].", "community": 0, "community_name": "Consola y utilidades de E/S", "source_file": "src/modules/utils.py", "file_type": "rationale", "degree": 1}, {"id": "src_modules_utils_rationale_72", "label": "Fracci\u00f3n, cadena u objeto Decimal a representaci\u00f3n decimal.", "color": {"background": "#4E79A7", "border": "#4E79A7", "highlight": {"background": "#ffffff", "border": "#4E79A7"}}, "size": 11.2, "font": {"size": 0, "color": "#ffffff"}, "title": "Fracci\u00f3n, cadena u objeto Decimal a representaci\u00f3n decimal.", "community": 0, "community_name": "Consola y utilidades de E/S", "source_file": "src/modules/utils.py", "file_type": "rationale", "degree": 1}, {"id": "src_modules_utils_rationale_78", "label": "Borra la consola si la entrada es una terminal interactiva.", "color": {"background": "#4E79A7", "border": "#4E79A7", "highlight": {"background": "#ffffff", "border": "#4E79A7"}}, "size": 11.2, "font": {"size": 0, "color": "#ffffff"}, "title": "Borra la consola si la entrada es una terminal interactiva.", "community": 0, "community_name": "Consola y utilidades de E/S", "source_file": "src/modules/utils.py", "file_type": "rationale", "degree": 1}, {"id": "src_modules_utils_rationale_85", "label": "Simula el comportamiento de pause en cmd.", "color": {"background": "#4E79A7", "border": "#4E79A7", "highlight": {"background": "#ffffff", "border": "#4E79A7"}}, "size": 11.2, "font": {"size": 0, "color": "#ffffff"}, "title": "Simula el comportamiento de pause en cmd.", "community": 0, "community_name": "Consola y utilidades de E/S", "source_file": "src/modules/utils.py", "file_type": "rationale", "degree": 1}, {"id": "src_modules_ajuste_rationale_10", "label": "Construye la matriz aumentada del sistema de Vandermonde. Cada punto (hora,\u2026", "color": {"background": "#F28E2B", "border": "#F28E2B", "highlight": {"background": "#ffffff", "border": "#F28E2B"}}, "size": 11.2, "font": {"size": 0, "color": "#ffffff"}, "title": "Construye la matriz aumentada del sistema de Vandermonde. Cada punto (hora,\u2026", "community": 1, "community_name": "Interpolaci\u00f3n polinomial (Vandermonde)", "source_file": "src/modules/ajuste.py", "file_type": "rationale", "degree": 1}, {"id": "src_modules_ajuste_rationale_32", "label": "Resuelve el sistema de Vandermonde con el m\u00e9todo de Montante. Retorna los\u2026", "color": {"background": "#F28E2B", "border": "#F28E2B", "highlight": {"background": "#ffffff", "border": "#F28E2B"}}, "size": 11.2, "font": {"size": 0, "color": "#ffffff"}, "title": "Resuelve el sistema de Vandermonde con el m\u00e9todo de Montante. Retorna los\u2026", "community": 1, "community_name": "Interpolaci\u00f3n polinomial (Vandermonde)", "source_file": "src/modules/ajuste.py", "file_type": "rationale", "degree": 1}, {"id": "src_modules_ajuste_rationale_43", "label": "Eval\u00faa el polinomio con coeficientes de menor a mayor grado (Horner).", "color": {"background": "#F28E2B", "border": "#F28E2B", "highlight": {"background": "#ffffff", "border": "#F28E2B"}}, "size": 11.2, "font": {"size": 0, "color": "#ffffff"}, "title": "Eval\u00faa el polinomio con coeficientes de menor a mayor grado (Horner).", "community": 1, "community_name": "Interpolaci\u00f3n polinomial (Vandermonde)", "source_file": "src/modules/ajuste.py", "file_type": "rationale", "degree": 1}, {"id": "src_modules_menu_rationale_112", "label": "Ejecuta el ajuste polinomial y la integraci\u00f3n con datos del usuario.", "color": {"background": "#F28E2B", "border": "#F28E2B", "highlight": {"background": "#ffffff", "border": "#F28E2B"}}, "size": 11.2, "font": {"size": 0, "color": "#ffffff"}, "title": "Ejecuta el ajuste polinomial y la integraci\u00f3n con datos del usuario.", "community": 1, "community_name": "Interpolaci\u00f3n polinomial (Vandermonde)", "source_file": "src/modules/menu.py", "file_type": "rationale", "degree": 1}, {"id": "src_modules_montante", "label": "montante.py", "color": {"background": "#E15759", "border": "#E15759", "highlight": {"background": "#ffffff", "border": "#E15759"}}, "size": 25.6, "font": {"size": 12, "color": "#ffffff"}, "title": "montante.py", "community": 2, "community_name": "M\u00e9todo de Montante", "source_file": "src/modules/montante.py", "file_type": "code", "degree": 13}, {"id": "src_modules_montante_rationale_111", "label": "Auxiliar para saber qu\u00e9 tipo es una matriz con determinante 0.", "color": {"background": "#E15759", "border": "#E15759", "highlight": {"background": "#ffffff", "border": "#E15759"}}, "size": 11.2, "font": {"size": 0, "color": "#ffffff"}, "title": "Auxiliar para saber qu\u00e9 tipo es una matriz con determinante 0.", "community": 2, "community_name": "M\u00e9todo de Montante", "source_file": "src/modules/montante.py", "file_type": "rationale", "degree": 1}, {"id": "src_modules_montante_rationale_143", "label": "Verifica si el sistema es resoluble. Retorna una tupla (es_resoluble,\u2026", "color": {"background": "#E15759", "border": "#E15759", "highlight": {"background": "#ffffff", "border": "#E15759"}}, "size": 11.2, "font": {"size": 0, "color": "#ffffff"}, "title": "Verifica si el sistema es resoluble. Retorna una tupla (es_resoluble,\u2026", "community": 2, "community_name": "M\u00e9todo de Montante", "source_file": "src/modules/montante.py", "file_type": "rationale", "degree": 1}, {"id": "src_modules_montante_rationale_25", "label": "Busca un pivote v\u00e1lido empezando en fila y columna k. Cambia filas si es\u2026", "color": {"background": "#E15759", "border": "#E15759", "highlight": {"background": "#ffffff", "border": "#E15759"}}, "size": 11.2, "font": {"size": 0, "color": "#ffffff"}, "title": "Busca un pivote v\u00e1lido empezando en fila y columna k. Cambia filas si es\u2026", "community": 2, "community_name": "M\u00e9todo de Montante", "source_file": "src/modules/montante.py", "file_type": "rationale", "degree": 1}, {"id": "src_modules_montante_rationale_41", "label": "Aplica el m\u00e9todo de eliminaci\u00f3n de Montante a la matriz aumentada. ValueError\u2026", "color": {"background": "#E15759", "border": "#E15759", "highlight": {"background": "#ffffff", "border": "#E15759"}}, "size": 11.2, "font": {"size": 0, "color": "#ffffff"}, "title": "Aplica el m\u00e9todo de eliminaci\u00f3n de Montante a la matriz aumentada. ValueError\u2026", "community": 2, "community_name": "M\u00e9todo de Montante", "source_file": "src/modules/montante.py", "file_type": "rationale", "degree": 1}, {"id": "src_modules_montante_rationale_69", "label": "Calcula el determinante usando el m\u00e9todo de Montante.", "color": {"background": "#E15759", "border": "#E15759", "highlight": {"background": "#ffffff", "border": "#E15759"}}, "size": 11.2, "font": {"size": 0, "color": "#ffffff"}, "title": "Calcula el determinante usando el m\u00e9todo de Montante.", "community": 2, "community_name": "M\u00e9todo de Montante", "source_file": "src/modules/montante.py", "file_type": "rationale", "degree": 1}, {"id": "src_modules_montante_rationale_94", "label": "Resuelve el sistema de ecuaciones con Montante. Retorna una lista de valores\u2026", "color": {"background": "#E15759", "border": "#E15759", "highlight": {"background": "#ffffff", "border": "#E15759"}}, "size": 11.2, "font": {"size": 0, "color": "#ffffff"}, "title": "Resuelve el sistema de ecuaciones con Montante. Retorna una lista de valores\u2026", "community": 2, "community_name": "M\u00e9todo de Montante", "source_file": "src/modules/montante.py", "file_type": "rationale", "degree": 1}, {"id": "src_modules_integracion", "label": "integracion.py", "color": {"background": "#76B7B2", "border": "#76B7B2", "highlight": {"background": "#ffffff", "border": "#76B7B2"}}, "size": 14.8, "font": {"size": 12, "color": "#ffffff"}, "title": "integracion.py", "community": 3, "community_name": "Integraci\u00f3n por trapecios", "source_file": "src/modules/integracion.py", "file_type": "code", "degree": 4}, {"id": "src_modules_menu", "label": "menu.py", "color": {"background": "#76B7B2", "border": "#76B7B2", "highlight": {"background": "#ffffff", "border": "#76B7B2"}}, "size": 40.0, "font": {"size": 12, "color": "#ffffff"}, "title": "menu.py", "community": 3, "community_name": "Integraci\u00f3n por trapecios", "source_file": "src/modules/menu.py", "file_type": "code", "degree": 25}, {"id": "src_modules_integracion_rationale_1", "label": "Integraci\u00f3n num\u00e9rica mediante la regla compuesta del trapecio.", "color": {"background": "#76B7B2", "border": "#76B7B2", "highlight": {"background": "#ffffff", "border": "#76B7B2"}}, "size": 11.2, "font": {"size": 0, "color": "#ffffff"}, "title": "Integraci\u00f3n num\u00e9rica mediante la regla compuesta del trapecio.", "community": 3, "community_name": "Integraci\u00f3n por trapecios", "source_file": "src/modules/integracion.py", "file_type": "rationale", "degree": 1}, {"id": "src_modules_integracion_rationale_7", "label": "Aproxima la integral definida con la regla compuesta del trapecio.", "color": {"background": "#76B7B2", "border": "#76B7B2", "highlight": {"background": "#ffffff", "border": "#76B7B2"}}, "size": 11.2, "font": {"size": 0, "color": "#ffffff"}, "title": "Aproxima la integral definida con la regla compuesta del trapecio.", "community": 3, "community_name": "Integraci\u00f3n por trapecios", "source_file": "src/modules/integracion.py", "file_type": "rationale", "degree": 1}, {"id": "src_modules_menu_rationale_1", "label": "Men\u00fa interactivo para la administraci\u00f3n de bater\u00edas de un centro de datos.", "color": {"background": "#76B7B2", "border": "#76B7B2", "highlight": {"background": "#ffffff", "border": "#76B7B2"}}, "size": 11.2, "font": {"size": 0, "color": "#ffffff"}, "title": "Men\u00fa interactivo para la administraci\u00f3n de bater\u00edas de un centro de datos.", "community": 3, "community_name": "Integraci\u00f3n por trapecios", "source_file": "src/modules/menu.py", "file_type": "rationale", "degree": 1}, {"id": "src_modules_menu_rationale_56", "label": "Lee la cantidad de trapecios para la integraci\u00f3n.", "color": {"background": "#76B7B2", "border": "#76B7B2", "highlight": {"background": "#ffffff", "border": "#76B7B2"}}, "size": 11.2, "font": {"size": 0, "color": "#ffffff"}, "title": "Lee la cantidad de trapecios para la integraci\u00f3n.", "community": 3, "community_name": "Integraci\u00f3n por trapecios", "source_file": "src/modules/menu.py", "file_type": "rationale", "degree": 1}, {"id": "src_modules_utils_rationale_35", "label": "Lee un entero positivo.", "color": {"background": "#76B7B2", "border": "#76B7B2", "highlight": {"background": "#ffffff", "border": "#76B7B2"}}, "size": 11.2, "font": {"size": 0, "color": "#ffffff"}, "title": "Lee un entero positivo.", "community": 3, "community_name": "Integraci\u00f3n por trapecios", "source_file": "src/modules/utils.py", "file_type": "rationale", "degree": 1}, {"id": "src_modules_ajuste", "label": "ajuste.py", "color": {"background": "#59A14F", "border": "#59A14F", "highlight": {"background": "#ffffff", "border": "#59A14F"}}, "size": 23.2, "font": {"size": 12, "color": "#ffffff"}, "title": "ajuste.py", "community": 4, "community_name": "Presentaci\u00f3n de resultados", "source_file": "src/modules/ajuste.py", "file_type": "code", "degree": 11}, {"id": "src_modules_ajuste_rationale_1", "label": "Ajuste del polinomio que pasa por las mediciones de potencia.", "color": {"background": "#59A14F", "border": "#59A14F", "highlight": {"background": "#ffffff", "border": "#59A14F"}}, "size": 11.2, "font": {"size": 0, "color": "#ffffff"}, "title": "Ajuste del polinomio que pasa por las mediciones de potencia.", "community": 4, "community_name": "Presentaci\u00f3n de resultados", "source_file": "src/modules/ajuste.py", "file_type": "rationale", "degree": 1}, {"id": "src_modules_ajuste_rationale_51", "label": "Devuelve el polinomio en texto, de mayor a menor grado.", "color": {"background": "#59A14F", "border": "#59A14F", "highlight": {"background": "#ffffff", "border": "#59A14F"}}, "size": 11.2, "font": {"size": 0, "color": "#ffffff"}, "title": "Devuelve el polinomio en texto, de mayor a menor grado.", "community": 4, "community_name": "Presentaci\u00f3n de resultados", "source_file": "src/modules/ajuste.py", "file_type": "rationale", "degree": 1}, {"id": "src_modules_menu_rationale_68", "label": "Muestra el ajuste polinomial y el balance neto de energ\u00eda.", "color": {"background": "#59A14F", "border": "#59A14F", "highlight": {"background": "#ffffff", "border": "#59A14F"}}, "size": 11.2, "font": {"size": 0, "color": "#ffffff"}, "title": "Muestra el ajuste polinomial y el balance neto de energ\u00eda.", "community": 4, "community_name": "Presentaci\u00f3n de resultados", "source_file": "src/modules/menu.py", "file_type": "rationale", "degree": 1}, {"id": "src_modules_utils_rationale_8", "label": "Convierte un n\u00famero a su representaci\u00f3n como fracci\u00f3n a/b.", "color": {"background": "#59A14F", "border": "#59A14F", "highlight": {"background": "#ffffff", "border": "#59A14F"}}, "size": 11.2, "font": {"size": 0, "color": "#ffffff"}, "title": "Convierte un n\u00famero a su representaci\u00f3n como fracci\u00f3n a/b.", "community": 4, "community_name": "Presentaci\u00f3n de resultados", "source_file": "src/modules/utils.py", "file_type": "rationale", "degree": 1}, {"id": "src_modules_menu_rationale_28", "label": "Lee las mediciones de potencia y las ordena por hora.", "color": {"background": "#EDC948", "border": "#EDC948", "highlight": {"background": "#ffffff", "border": "#EDC948"}}, "size": 11.2, "font": {"size": 0, "color": "#ffffff"}, "title": "Lee las mediciones de potencia y las ordena por hora.", "community": 5, "community_name": "Entrada de mediciones", "source_file": "src/modules/menu.py", "file_type": "rationale", "degree": 1}, {"id": "src_modules_utils_rationale_14", "label": "Retorna una fracci\u00f3n exacta a partir del n\u00famero ingresado. ValueError si el\u2026", "color": {"background": "#EDC948", "border": "#EDC948", "highlight": {"background": "#ffffff", "border": "#EDC948"}}, "size": 11.2, "font": {"size": 0, "color": "#ffffff"}, "title": "Retorna una fracci\u00f3n exacta a partir del n\u00famero ingresado. ValueError si el\u2026", "community": 5, "community_name": "Entrada de mediciones", "source_file": "src/modules/utils.py", "file_type": "rationale", "degree": 1}, {"id": "src_modules_utils_rationale_49", "label": "Lee un entero o decimal y lo regresa como Fraction.", "color": {"background": "#EDC948", "border": "#EDC948", "highlight": {"background": "#ffffff", "border": "#EDC948"}}, "size": 11.2, "font": {"size": 0, "color": "#ffffff"}, "title": "Lee un entero o decimal y lo regresa como Fraction.", "community": 5, "community_name": "Entrada de mediciones", "source_file": "src/modules/utils.py", "file_type": "rationale", "degree": 1}, {"id": "exec", "label": "exec.sh", "color": {"background": "#B07AA1", "border": "#B07AA1", "highlight": {"background": "#ffffff", "border": "#B07AA1"}}, "size": 11.2, "font": {"size": 0, "color": "#ffffff"}, "title": "exec.sh", "community": 6, "community_name": "Entrada y ejecuci\u00f3n", "source_file": "exec.sh", "file_type": "code", "degree": 1}, {"id": "exec_sh__entry", "label": "exec.sh script", "color": {"background": "#B07AA1", "border": "#B07AA1", "highlight": {"background": "#ffffff", "border": "#B07AA1"}}, "size": 12.4, "font": {"size": 0, "color": "#ffffff"}, "title": "exec.sh script", "community": 6, "community_name": "Entrada y ejecuci\u00f3n", "source_file": "exec.sh", "file_type": "code", "degree": 2}, {"id": "src_main", "label": "main.py", "color": {"background": "#B07AA1", "border": "#B07AA1", "highlight": {"background": "#ffffff", "border": "#B07AA1"}}, "size": 13.6, "font": {"size": 0, "color": "#ffffff"}, "title": "main.py", "community": 6, "community_name": "Entrada y ejecuci\u00f3n", "source_file": "src/main.py", "file_type": "code", "degree": 3}, {"id": "src_modules_init", "label": "__init__.py", "color": {"background": "#FF9DA7", "border": "#FF9DA7", "highlight": {"background": "#ffffff", "border": "#FF9DA7"}}, "size": 11.2, "font": {"size": 0, "color": "#ffffff"}, "title": "__init__.py", "community": 7, "community_name": "Paquete de m\u00f3dulos", "source_file": "src/modules/__init__.py", "file_type": "code", "degree": 1}, {"id": "src_modules_init_rationale_1", "label": "Paquete de m\u00f3dulos para la administraci\u00f3n de bater\u00edas de un centro de datos.", "color": {"background": "#FF9DA7", "border": "#FF9DA7", "highlight": {"background": "#ffffff", "border": "#FF9DA7"}}, "size": 11.2, "font": {"size": 0, "color": "#ffffff"}, "title": "Paquete de m\u00f3dulos para la administraci\u00f3n de bater\u00edas de un centro de datos.", "community": 7, "community_name": "Paquete de m\u00f3dulos", "source_file": "src/modules/__init__.py", "file_type": "rationale", "degree": 1}, {"id": "readme_reutilizacion_proyecto_1", "label": "Reutilizaci\u00f3n de c\u00f3digo del Proyecto 1", "color": {"background": "#4E79A7", "border": "#4E79A7", "highlight": {"background": "#ffffff", "border": "#4E79A7"}}, "size": 19.6, "font": {"size": 12, "color": "#ffffff"}, "title": "Reutilizaci\u00f3n de c\u00f3digo del Proyecto 1", "community": 0, "community_name": "Consola y utilidades de E/S", "source_file": "README.md", "file_type": "rationale", "degree": 8}, {"id": "readme_extrapolacion_estimacion", "label": "Extrapolaci\u00f3n a horas sin medici\u00f3n", "color": {"background": "#F28E2B", "border": "#F28E2B", "highlight": {"background": "#ffffff", "border": "#F28E2B"}}, "size": 11.2, "font": {"size": 0, "color": "#ffffff"}, "title": "Extrapolaci\u00f3n a horas sin medici\u00f3n", "community": 1, "community_name": "Interpolaci\u00f3n polinomial (Vandermonde)", "source_file": "README.md", "file_type": "concept", "degree": 1}, {"id": "readme_fenomeno_runge", "label": "Fen\u00f3meno de Runge", "color": {"background": "#F28E2B", "border": "#F28E2B", "highlight": {"background": "#ffffff", "border": "#F28E2B"}}, "size": 11.2, "font": {"size": 0, "color": "#ffffff"}, "title": "Fen\u00f3meno de Runge", "community": 1, "community_name": "Interpolaci\u00f3n polinomial (Vandermonde)", "source_file": "README.md", "file_type": "concept", "degree": 1}, {"id": "readme_interpolacion_polinomial", "label": "Interpolaci\u00f3n polinomial de mediciones", "color": {"background": "#F28E2B", "border": "#F28E2B", "highlight": {"background": "#ffffff", "border": "#F28E2B"}}, "size": 17.2, "font": {"size": 12, "color": "#ffffff"}, "title": "Interpolaci\u00f3n polinomial de mediciones", "community": 1, "community_name": "Interpolaci\u00f3n polinomial (Vandermonde)", "source_file": "README.md", "file_type": "concept", "degree": 6}, {"id": "readme_metodo_montante", "label": "M\u00e9todo de Montante", "color": {"background": "#F28E2B", "border": "#F28E2B", "highlight": {"background": "#ffffff", "border": "#F28E2B"}}, "size": 13.6, "font": {"size": 0, "color": "#ffffff"}, "title": "M\u00e9todo de Montante", "community": 1, "community_name": "Interpolaci\u00f3n polinomial (Vandermonde)", "source_file": "README.md", "file_type": "concept", "degree": 3}, {"id": "readme_sistema_vandermonde", "label": "Sistema de Vandermonde", "color": {"background": "#F28E2B", "border": "#F28E2B", "highlight": {"background": "#ffffff", "border": "#F28E2B"}}, "size": 13.6, "font": {"size": 0, "color": "#ffffff"}, "title": "Sistema de Vandermonde", "community": 1, "community_name": "Interpolaci\u00f3n polinomial (Vandermonde)", "source_file": "README.md", "file_type": "concept", "degree": 3}, {"id": "readme_aritmetica_exacta_fraction", "label": "Aritm\u00e9tica exacta con Fraction", "color": {"background": "#F28E2B", "border": "#F28E2B", "highlight": {"background": "#ffffff", "border": "#F28E2B"}}, "size": 12.4, "font": {"size": 0, "color": "#ffffff"}, "title": "Aritm\u00e9tica exacta con Fraction", "community": 1, "community_name": "Interpolaci\u00f3n polinomial (Vandermonde)", "source_file": "README.md", "file_type": "rationale", "degree": 2}, {"id": "readme_balance_neto_energia", "label": "Balance neto de energ\u00eda del d\u00eda", "color": {"background": "#76B7B2", "border": "#76B7B2", "highlight": {"background": "#ffffff", "border": "#76B7B2"}}, "size": 12.4, "font": {"size": 0, "color": "#ffffff"}, "title": "Balance neto de energ\u00eda del d\u00eda", "community": 3, "community_name": "Integraci\u00f3n por trapecios", "source_file": "README.md", "file_type": "concept", "degree": 2}, {"id": "readme_regla_trapecio_compuesta", "label": "Regla compuesta del trapecio", "color": {"background": "#76B7B2", "border": "#76B7B2", "highlight": {"background": "#ffffff", "border": "#76B7B2"}}, "size": 13.6, "font": {"size": 0, "color": "#ffffff"}, "title": "Regla compuesta del trapecio", "community": 3, "community_name": "Integraci\u00f3n por trapecios", "source_file": "README.md", "file_type": "concept", "degree": 3}, {"id": "readme_convencion_signo_potencia", "label": "Convenci\u00f3n de signo de potencia (+ carga / \u2212 descarga)", "color": {"background": "#EDC948", "border": "#EDC948", "highlight": {"background": "#ffffff", "border": "#EDC948"}}, "size": 11.2, "font": {"size": 0, "color": "#ffffff"}, "title": "Convenci\u00f3n de signo de potencia (+ carga / \u2212 descarga)", "community": 5, "community_name": "Entrada de mediciones", "source_file": "README.md", "file_type": "concept", "degree": 1}, {"id": "decimal", "label": "decimal", "color": {"background": "#4E79A7", "border": "#4E79A7", "highlight": {"background": "#ffffff", "border": "#4E79A7"}}, "size": 11.2, "font": {"size": 0, "color": "#ffffff"}, "title": "decimal", "community": 0, "community_name": "Consola y utilidades de E/S", "source_file": "", "file_type": "concept", "degree": 1}, {"id": "os", "label": "os", "color": {"background": "#4E79A7", "border": "#4E79A7", "highlight": {"background": "#ffffff", "border": "#4E79A7"}}, "size": 13.6, "font": {"size": 0, "color": "#ffffff"}, "title": "os", "community": 0, "community_name": "Consola y utilidades de E/S", "source_file": "", "file_type": "concept", "degree": 3}, {"id": "sys", "label": "sys", "color": {"background": "#4E79A7", "border": "#4E79A7", "highlight": {"background": "#ffffff", "border": "#4E79A7"}}, "size": 11.2, "font": {"size": 0, "color": "#ffffff"}, "title": "sys", "community": 0, "community_name": "Consola y utilidades de E/S", "source_file": "", "file_type": "concept", "degree": 1}, {"id": "fractions", "label": "fractions", "color": {"background": "#76B7B2", "border": "#76B7B2", "highlight": {"background": "#ffffff", "border": "#76B7B2"}}, "size": 16.0, "font": {"size": 12, "color": "#ffffff"}, "title": "fractions", "community": 3, "community_name": "Integraci\u00f3n por trapecios", "source_file": "", "file_type": "concept", "degree": 5}];
+const RAW_EDGES = [{"from": "src_modules_menu_run", "to": "src_modules_utils_borrar_consola", "label": "calls", "title": "calls [EXTRACTED]", "dashes": false, "width": 2, "color": {"opacity": 0.7}, "confidence": "EXTRACTED"}, {"from": "src_modules_menu_run", "to": "src_modules_utils_leer_opcion", "label": "calls", "title": "calls [EXTRACTED]", "dashes": false, "width": 2, "color": {"opacity": 0.7}, "confidence": "EXTRACTED"}, {"from": "src_modules_menu_run", "to": "src_modules_menu_ejecutar_calculo", "label": "calls", "title": "calls [EXTRACTED]", "dashes": false, "width": 2, "color": {"opacity": 0.7}, "confidence": "EXTRACTED"}, {"from": "src_modules_menu_run", "to": "src_modules_utils_pausar", "label": "calls", "title": "calls [EXTRACTED]", "dashes": false, "width": 2, "color": {"opacity": 0.7}, "confidence": "EXTRACTED"}, {"from": "src_main", "to": "src_modules_menu_run", "label": "imports", "title": "imports [EXTRACTED]", "dashes": false, "width": 2, "color": {"opacity": 0.7}, "confidence": "EXTRACTED"}, {"from": "src_modules_menu", "to": "src_modules_menu_run", "label": "contains", "title": "contains [EXTRACTED]", "dashes": false, "width": 2, "color": {"opacity": 0.7}, "confidence": "EXTRACTED"}, {"from": "src_modules_menu_rationale_132", "to": "src_modules_menu_run", "label": "rationale_for", "title": "rationale_for [EXTRACTED]", "dashes": false, "width": 2, "color": {"opacity": 0.7}, "confidence": "EXTRACTED"}, {"from": "src_modules_utils_borrar_consola", "to": "os", "label": "calls", "title": "calls [EXTRACTED]", "dashes": false, "width": 2, "color": {"opacity": 0.7}, "confidence": "EXTRACTED"}, {"from": "src_modules_menu", "to": "src_modules_utils_borrar_consola", "label": "imports", "title": "imports [EXTRACTED]", "dashes": false, "width": 2, "color": {"opacity": 0.7}, "confidence": "EXTRACTED"}, {"from": "src_modules_utils", "to": "src_modules_utils_borrar_consola", "label": "contains", "title": "contains [EXTRACTED]", "dashes": false, "width": 2, "color": {"opacity": 0.7}, "confidence": "EXTRACTED"}, {"from": "src_modules_utils_rationale_78", "to": "src_modules_utils_borrar_consola", "label": "rationale_for", "title": "rationale_for [EXTRACTED]", "dashes": false, "width": 2, "color": {"opacity": 0.7}, "confidence": "EXTRACTED"}, {"from": "readme_reutilizacion_proyecto_1", "to": "src_modules_utils_borrar_consola", "label": "references", "title": "references [EXTRACTED]", "dashes": false, "width": 2, "color": {"opacity": 0.7}, "confidence": "EXTRACTED"}, {"from": "src_modules_menu_mostrar_resultados", "to": "src_modules_utils_formatear_a_decimal", "label": "calls", "title": "calls [EXTRACTED]", "dashes": false, "width": 2, "color": {"opacity": 0.7}, "confidence": "EXTRACTED"}, {"from": "src_modules_menu", "to": "src_modules_utils_formatear_a_decimal", "label": "imports", "title": "imports [EXTRACTED]", "dashes": false, "width": 2, "color": {"opacity": 0.7}, "confidence": "EXTRACTED"}, {"from": "src_modules_utils", "to": "src_modules_utils_formatear_a_decimal", "label": "contains", "title": "contains [EXTRACTED]", "dashes": false, "width": 2, "color": {"opacity": 0.7}, "confidence": "EXTRACTED"}, {"from": "src_modules_utils_rationale_72", "to": "src_modules_utils_formatear_a_decimal", "label": "rationale_for", "title": "rationale_for [EXTRACTED]", "dashes": false, "width": 2, "color": {"opacity": 0.7}, "confidence": "EXTRACTED"}, {"from": "readme_reutilizacion_proyecto_1", "to": "src_modules_utils_formatear_a_decimal", "label": "references", "title": "references [EXTRACTED]", "dashes": false, "width": 2, "color": {"opacity": 0.7}, "confidence": "EXTRACTED"}, {"from": "src_modules_menu_ingresar_mediciones", "to": "src_modules_utils_leer_opcion", "label": "calls", "title": "calls [EXTRACTED]", "dashes": false, "width": 2, "color": {"opacity": 0.7}, "confidence": "EXTRACTED"}, {"from": "src_modules_menu", "to": "src_modules_utils_leer_opcion", "label": "imports", "title": "imports [EXTRACTED]", "dashes": false, "width": 2, "color": {"opacity": 0.7}, "confidence": "EXTRACTED"}, {"from": "src_modules_utils", "to": "src_modules_utils_leer_opcion", "label": "contains", "title": "contains [EXTRACTED]", "dashes": false, "width": 2, "color": {"opacity": 0.7}, "confidence": "EXTRACTED"}, {"from": "src_modules_utils_rationale_59", "to": "src_modules_utils_leer_opcion", "label": "rationale_for", "title": "rationale_for [EXTRACTED]", "dashes": false, "width": 2, "color": {"opacity": 0.7}, "confidence": "EXTRACTED"}, {"from": "readme_reutilizacion_proyecto_1", "to": "src_modules_utils_leer_opcion", "label": "references", "title": "references [EXTRACTED]", "dashes": false, "width": 2, "color": {"opacity": 0.7}, "confidence": "EXTRACTED"}, {"from": "src_modules_utils_pausar", "to": "os", "label": "calls", "title": "calls [EXTRACTED]", "dashes": false, "width": 2, "color": {"opacity": 0.7}, "confidence": "EXTRACTED"}, {"from": "src_modules_menu", "to": "src_modules_utils_pausar", "label": "imports", "title": "imports [EXTRACTED]", "dashes": false, "width": 2, "color": {"opacity": 0.7}, "confidence": "EXTRACTED"}, {"from": "src_modules_utils", "to": "src_modules_utils_pausar", "label": "contains", "title": "contains [EXTRACTED]", "dashes": false, "width": 2, "color": {"opacity": 0.7}, "confidence": "EXTRACTED"}, {"from": "src_modules_utils_rationale_85", "to": "src_modules_utils_pausar", "label": "rationale_for", "title": "rationale_for [EXTRACTED]", "dashes": false, "width": 2, "color": {"opacity": 0.7}, "confidence": "EXTRACTED"}, {"from": "readme_reutilizacion_proyecto_1", "to": "src_modules_utils_pausar", "label": "references", "title": "references [EXTRACTED]", "dashes": false, "width": 2, "color": {"opacity": 0.7}, "confidence": "EXTRACTED"}, {"from": "src_modules_menu_ejecutar_calculo", "to": "src_modules_ajuste_construir_sistema", "label": "calls", "title": "calls [EXTRACTED]", "dashes": false, "width": 2, "color": {"opacity": 0.7}, "confidence": "EXTRACTED"}, {"from": "src_modules_menu", "to": "src_modules_ajuste_construir_sistema", "label": "imports", "title": "imports [EXTRACTED]", "dashes": false, "width": 2, "color": {"opacity": 0.7}, "confidence": "EXTRACTED"}, {"from": "src_modules_ajuste", "to": "src_modules_ajuste_construir_sistema", "label": "contains", "title": "contains [EXTRACTED]", "dashes": false, "width": 2, "color": {"opacity": 0.7}, "confidence": "EXTRACTED"}, {"from": "src_modules_ajuste_rationale_10", "to": "src_modules_ajuste_construir_sistema", "label": "rationale_for", "title": "rationale_for [EXTRACTED]", "dashes": false, "width": 2, "color": {"opacity": 0.7}, "confidence": "EXTRACTED"}, {"from": "readme_sistema_vandermonde", "to": "src_modules_ajuste_construir_sistema", "label": "implements", "title": "implements [INFERRED]", "dashes": true, "width": 1, "color": {"opacity": 0.35}, "confidence": "INFERRED"}, {"from": "src_modules_menu_ejecutar_calculo", "to": "src_modules_ajuste_evaluar_polinomio", "label": "calls", "title": "calls [EXTRACTED]", "dashes": false, "width": 2, "color": {"opacity": 0.7}, "confidence": "EXTRACTED"}, {"from": "src_modules_menu", "to": "src_modules_ajuste_evaluar_polinomio", "label": "imports", "title": "imports [EXTRACTED]", "dashes": false, "width": 2, "color": {"opacity": 0.7}, "confidence": "EXTRACTED"}, {"from": "src_modules_ajuste", "to": "src_modules_ajuste_evaluar_polinomio", "label": "contains", "title": "contains [EXTRACTED]", "dashes": false, "width": 2, "color": {"opacity": 0.7}, "confidence": "EXTRACTED"}, {"from": "src_modules_ajuste_rationale_43", "to": "src_modules_ajuste_evaluar_polinomio", "label": "rationale_for", "title": "rationale_for [EXTRACTED]", "dashes": false, "width": 2, "color": {"opacity": 0.7}, "confidence": "EXTRACTED"}, {"from": "readme_interpolacion_polinomial", "to": "src_modules_ajuste_evaluar_polinomio", "label": "implements", "title": "implements [INFERRED]", "dashes": true, "width": 1, "color": {"opacity": 0.35}, "confidence": "INFERRED"}, {"from": "src_modules_ajuste_resolver_coeficientes", "to": "src_modules_montante_resolver_sistema", "label": "calls", "title": "calls [EXTRACTED]", "dashes": false, "width": 2, "color": {"opacity": 0.7}, "confidence": "EXTRACTED"}, {"from": "src_modules_menu_ejecutar_calculo", "to": "src_modules_ajuste_resolver_coeficientes", "label": "calls", "title": "calls [EXTRACTED]", "dashes": false, "width": 2, "color": {"opacity": 0.7}, "confidence": "EXTRACTED"}, {"from": "src_modules_menu", "to": "src_modules_ajuste_resolver_coeficientes", "label": "imports", "title": "imports [EXTRACTED]", "dashes": false, "width": 2, "color": {"opacity": 0.7}, "confidence": "EXTRACTED"}, {"from": "src_modules_ajuste", "to": "src_modules_ajuste_resolver_coeficientes", "label": "contains", "title": "contains [EXTRACTED]", "dashes": false, "width": 2, "color": {"opacity": 0.7}, "confidence": "EXTRACTED"}, {"from": "src_modules_ajuste_rationale_32", "to": "src_modules_ajuste_resolver_coeficientes", "label": "rationale_for", "title": "rationale_for [EXTRACTED]", "dashes": false, "width": 2, "color": {"opacity": 0.7}, "confidence": "EXTRACTED"}, {"from": "readme_aritmetica_exacta_fraction", "to": "src_modules_ajuste_resolver_coeficientes", "label": "rationale_for", "title": "rationale_for [INFERRED]", "dashes": true, "width": 1, "color": {"opacity": 0.35}, "confidence": "INFERRED"}, {"from": "readme_interpolacion_polinomial", "to": "src_modules_ajuste_resolver_coeficientes", "label": "implements", "title": "implements [INFERRED]", "dashes": true, "width": 1, "color": {"opacity": 0.35}, "confidence": "INFERRED"}, {"from": "src_modules_menu_ejecutar_calculo", "to": "src_modules_menu_ingresar_mediciones", "label": "calls", "title": "calls [EXTRACTED]", "dashes": false, "width": 2, "color": {"opacity": 0.7}, "confidence": "EXTRACTED"}, {"from": "src_modules_menu_ejecutar_calculo", "to": "src_modules_menu_leer_numero_trapecios", "label": "calls", "title": "calls [EXTRACTED]", "dashes": false, "width": 2, "color": {"opacity": 0.7}, "confidence": "EXTRACTED"}, {"from": "src_modules_menu_ejecutar_calculo", "to": "src_modules_montante_mostrar_matriz", "label": "calls", "title": "calls [EXTRACTED]", "dashes": false, "width": 2, "color": {"opacity": 0.7}, "confidence": "EXTRACTED"}, {"from": "src_modules_menu_ejecutar_calculo", "to": "src_modules_integracion_regla_del_trapecio", "label": "calls", "title": "calls [EXTRACTED]", "dashes": false, "width": 2, "color": {"opacity": 0.7}, "confidence": "EXTRACTED"}, {"from": "src_modules_menu_ejecutar_calculo", "to": "src_modules_menu_mostrar_resultados", "label": "calls", "title": "calls [EXTRACTED]", "dashes": false, "width": 2, "color": {"opacity": 0.7}, "confidence": "EXTRACTED"}, {"from": "src_modules_menu", "to": "src_modules_menu_ejecutar_calculo", "label": "contains", "title": "contains [EXTRACTED]", "dashes": false, "width": 2, "color": {"opacity": 0.7}, "confidence": "EXTRACTED"}, {"from": "src_modules_menu_rationale_112", "to": "src_modules_menu_ejecutar_calculo", "label": "rationale_for", "title": "rationale_for [EXTRACTED]", "dashes": false, "width": 2, "color": {"opacity": 0.7}, "confidence": "EXTRACTED"}, {"from": "src_modules_montante_mostrar_matriz", "to": "src_modules_utils_formatear_a_fraccion", "label": "calls", "title": "calls [EXTRACTED]", "dashes": false, "width": 2, "color": {"opacity": 0.7}, "confidence": "EXTRACTED"}, {"from": "src_modules_menu", "to": "src_modules_montante_mostrar_matriz", "label": "imports", "title": "imports [EXTRACTED]", "dashes": false, "width": 2, "color": {"opacity": 0.7}, "confidence": "EXTRACTED"}, {"from": "src_modules_montante", "to": "src_modules_montante_mostrar_matriz", "label": "contains", "title": "contains [EXTRACTED]", "dashes": false, "width": 2, "color": {"opacity": 0.7}, "confidence": "EXTRACTED"}, {"from": "readme_metodo_montante", "to": "src_modules_montante_mostrar_matriz", "label": "references", "title": "references [EXTRACTED]", "dashes": false, "width": 2, "color": {"opacity": 0.7}, "confidence": "EXTRACTED"}, {"from": "src_modules_montante_determinante", "to": "src_modules_montante_copiar", "label": "calls", "title": "calls [EXTRACTED]", "dashes": false, "width": 2, "color": {"opacity": 0.7}, "confidence": "EXTRACTED"}, {"from": "src_modules_montante_eliminacion_montante", "to": "src_modules_montante_copiar", "label": "calls", "title": "calls [EXTRACTED]", "dashes": false, "width": 2, "color": {"opacity": 0.7}, "confidence": "EXTRACTED"}, {"from": "src_modules_montante_rango", "to": "src_modules_montante_copiar", "label": "calls", "title": "calls [EXTRACTED]", "dashes": false, "width": 2, "color": {"opacity": 0.7}, "confidence": "EXTRACTED"}, {"from": "src_modules_montante", "to": "src_modules_montante_copiar", "label": "contains", "title": "contains [EXTRACTED]", "dashes": false, "width": 2, "color": {"opacity": 0.7}, "confidence": "EXTRACTED"}, {"from": "src_modules_montante_determinante", "to": "src_modules_montante_hallar_pivote", "label": "calls", "title": "calls [EXTRACTED]", "dashes": false, "width": 2, "color": {"opacity": 0.7}, "confidence": "EXTRACTED"}, {"from": "src_modules_montante_resoluble", "to": "src_modules_montante_determinante", "label": "calls", "title": "calls [EXTRACTED]", "dashes": false, "width": 2, "color": {"opacity": 0.7}, "confidence": "EXTRACTED"}, {"from": "src_modules_montante", "to": "src_modules_montante_determinante", "label": "contains", "title": "contains [EXTRACTED]", "dashes": false, "width": 2, "color": {"opacity": 0.7}, "confidence": "EXTRACTED"}, {"from": "src_modules_montante_rationale_69", "to": "src_modules_montante_determinante", "label": "rationale_for", "title": "rationale_for [EXTRACTED]", "dashes": false, "width": 2, "color": {"opacity": 0.7}, "confidence": "EXTRACTED"}, {"from": "src_modules_montante_eliminacion_montante", "to": "src_modules_montante_hallar_pivote", "label": "calls", "title": "calls [EXTRACTED]", "dashes": false, "width": 2, "color": {"opacity": 0.7}, "confidence": "EXTRACTED"}, {"from": "src_modules_montante_resolver_sistema", "to": "src_modules_montante_eliminacion_montante", "label": "calls", "title": "calls [EXTRACTED]", "dashes": false, "width": 2, "color": {"opacity": 0.7}, "confidence": "EXTRACTED"}, {"from": "src_modules_montante", "to": "src_modules_montante_eliminacion_montante", "label": "contains", "title": "contains [EXTRACTED]", "dashes": false, "width": 2, "color": {"opacity": 0.7}, "confidence": "EXTRACTED"}, {"from": "src_modules_montante_rationale_41", "to": "src_modules_montante_eliminacion_montante", "label": "rationale_for", "title": "rationale_for [EXTRACTED]", "dashes": false, "width": 2, "color": {"opacity": 0.7}, "confidence": "EXTRACTED"}, {"from": "src_modules_montante", "to": "src_modules_montante_hallar_pivote", "label": "contains", "title": "contains [EXTRACTED]", "dashes": false, "width": 2, "color": {"opacity": 0.7}, "confidence": "EXTRACTED"}, {"from": "src_modules_montante_rationale_25", "to": "src_modules_montante_hallar_pivote", "label": "rationale_for", "title": "rationale_for [EXTRACTED]", "dashes": false, "width": 2, "color": {"opacity": 0.7}, "confidence": "EXTRACTED"}, {"from": "src_modules_montante_resoluble", "to": "src_modules_montante_rango", "label": "calls", "title": "calls [EXTRACTED]", "dashes": false, "width": 2, "color": {"opacity": 0.7}, "confidence": "EXTRACTED"}, {"from": "src_modules_montante", "to": "src_modules_montante_rango", "label": "contains", "title": "contains [EXTRACTED]", "dashes": false, "width": 2, "color": {"opacity": 0.7}, "confidence": "EXTRACTED"}, {"from": "src_modules_montante_rationale_111", "to": "src_modules_montante_rango", "label": "rationale_for", "title": "rationale_for [EXTRACTED]", "dashes": false, "width": 2, "color": {"opacity": 0.7}, "confidence": "EXTRACTED"}, {"from": "src_modules_montante", "to": "src_modules_montante_resoluble", "label": "contains", "title": "contains [EXTRACTED]", "dashes": false, "width": 2, "color": {"opacity": 0.7}, "confidence": "EXTRACTED"}, {"from": "src_modules_montante_rationale_143", "to": "src_modules_montante_resoluble", "label": "rationale_for", "title": "rationale_for [EXTRACTED]", "dashes": false, "width": 2, "color": {"opacity": 0.7}, "confidence": "EXTRACTED"}, {"from": "src_modules_ajuste", "to": "src_modules_montante_resolver_sistema", "label": "imports", "title": "imports [EXTRACTED]", "dashes": false, "width": 2, "color": {"opacity": 0.7}, "confidence": "EXTRACTED"}, {"from": "src_modules_montante", "to": "src_modules_montante_resolver_sistema", "label": "contains", "title": "contains [EXTRACTED]", "dashes": false, "width": 2, "color": {"opacity": 0.7}, "confidence": "EXTRACTED"}, {"from": "src_modules_montante_rationale_94", "to": "src_modules_montante_resolver_sistema", "label": "rationale_for", "title": "rationale_for [EXTRACTED]", "dashes": false, "width": 2, "color": {"opacity": 0.7}, "confidence": "EXTRACTED"}, {"from": "readme_metodo_montante", "to": "src_modules_montante_resolver_sistema", "label": "references", "title": "references [EXTRACTED]", "dashes": false, "width": 2, "color": {"opacity": 0.7}, "confidence": "EXTRACTED"}, {"from": "readme_reutilizacion_proyecto_1", "to": "src_modules_montante_resolver_sistema", "label": "references", "title": "references [EXTRACTED]", "dashes": false, "width": 2, "color": {"opacity": 0.7}, "confidence": "EXTRACTED"}, {"from": "src_modules_menu", "to": "src_modules_integracion_regla_del_trapecio", "label": "imports", "title": "imports [EXTRACTED]", "dashes": false, "width": 2, "color": {"opacity": 0.7}, "confidence": "EXTRACTED"}, {"from": "src_modules_integracion", "to": "src_modules_integracion_regla_del_trapecio", "label": "contains", "title": "contains [EXTRACTED]", "dashes": false, "width": 2, "color": {"opacity": 0.7}, "confidence": "EXTRACTED"}, {"from": "src_modules_integracion_rationale_7", "to": "src_modules_integracion_regla_del_trapecio", "label": "rationale_for", "title": "rationale_for [EXTRACTED]", "dashes": false, "width": 2, "color": {"opacity": 0.7}, "confidence": "EXTRACTED"}, {"from": "readme_regla_trapecio_compuesta", "to": "src_modules_integracion_regla_del_trapecio", "label": "implements", "title": "implements [INFERRED]", "dashes": true, "width": 1, "color": {"opacity": 0.35}, "confidence": "INFERRED"}, {"from": "src_modules_menu_leer_numero_trapecios", "to": "src_modules_utils_leer_int", "label": "calls", "title": "calls [EXTRACTED]", "dashes": false, "width": 2, "color": {"opacity": 0.7}, "confidence": "EXTRACTED"}, {"from": "src_modules_menu", "to": "src_modules_menu_leer_numero_trapecios", "label": "contains", "title": "contains [EXTRACTED]", "dashes": false, "width": 2, "color": {"opacity": 0.7}, "confidence": "EXTRACTED"}, {"from": "src_modules_menu_rationale_56", "to": "src_modules_menu_leer_numero_trapecios", "label": "rationale_for", "title": "rationale_for [EXTRACTED]", "dashes": false, "width": 2, "color": {"opacity": 0.7}, "confidence": "EXTRACTED"}, {"from": "readme_regla_trapecio_compuesta", "to": "src_modules_menu_leer_numero_trapecios", "label": "shares_data_with", "title": "shares_data_with [INFERRED]", "dashes": true, "width": 1, "color": {"opacity": 0.35}, "confidence": "INFERRED"}, {"from": "src_modules_menu_ingresar_mediciones", "to": "src_modules_utils_leer_int", "label": "calls", "title": "calls [EXTRACTED]", "dashes": false, "width": 2, "color": {"opacity": 0.7}, "confidence": "EXTRACTED"}, {"from": "src_modules_menu", "to": "src_modules_utils_leer_int", "label": "imports", "title": "imports [EXTRACTED]", "dashes": false, "width": 2, "color": {"opacity": 0.7}, "confidence": "EXTRACTED"}, {"from": "src_modules_utils", "to": "src_modules_utils_leer_int", "label": "contains", "title": "contains [EXTRACTED]", "dashes": false, "width": 2, "color": {"opacity": 0.7}, "confidence": "EXTRACTED"}, {"from": "src_modules_utils_rationale_35", "to": "src_modules_utils_leer_int", "label": "rationale_for", "title": "rationale_for [EXTRACTED]", "dashes": false, "width": 2, "color": {"opacity": 0.7}, "confidence": "EXTRACTED"}, {"from": "readme_reutilizacion_proyecto_1", "to": "src_modules_utils_leer_int", "label": "references", "title": "references [EXTRACTED]", "dashes": false, "width": 2, "color": {"opacity": 0.7}, "confidence": "EXTRACTED"}, {"from": "src_modules_ajuste_formatear_polinomio", "to": "src_modules_utils_formatear_a_fraccion", "label": "calls", "title": "calls [EXTRACTED]", "dashes": false, "width": 2, "color": {"opacity": 0.7}, "confidence": "EXTRACTED"}, {"from": "src_modules_menu_mostrar_resultados", "to": "src_modules_ajuste_formatear_polinomio", "label": "calls", "title": "calls [EXTRACTED]", "dashes": false, "width": 2, "color": {"opacity": 0.7}, "confidence": "EXTRACTED"}, {"from": "src_modules_menu", "to": "src_modules_ajuste_formatear_polinomio", "label": "imports", "title": "imports [EXTRACTED]", "dashes": false, "width": 2, "color": {"opacity": 0.7}, "confidence": "EXTRACTED"}, {"from": "src_modules_ajuste", "to": "src_modules_ajuste_formatear_polinomio", "label": "contains", "title": "contains [EXTRACTED]", "dashes": false, "width": 2, "color": {"opacity": 0.7}, "confidence": "EXTRACTED"}, {"from": "src_modules_ajuste_rationale_51", "to": "src_modules_ajuste_formatear_polinomio", "label": "rationale_for", "title": "rationale_for [EXTRACTED]", "dashes": false, "width": 2, "color": {"opacity": 0.7}, "confidence": "EXTRACTED"}, {"from": "src_modules_menu_mostrar_resultados", "to": "src_modules_utils_formatear_a_fraccion", "label": "calls", "title": "calls [EXTRACTED]", "dashes": false, "width": 2, "color": {"opacity": 0.7}, "confidence": "EXTRACTED"}, {"from": "src_modules_menu", "to": "src_modules_menu_mostrar_resultados", "label": "contains", "title": "contains [EXTRACTED]", "dashes": false, "width": 2, "color": {"opacity": 0.7}, "confidence": "EXTRACTED"}, {"from": "src_modules_menu_rationale_68", "to": "src_modules_menu_mostrar_resultados", "label": "rationale_for", "title": "rationale_for [EXTRACTED]", "dashes": false, "width": 2, "color": {"opacity": 0.7}, "confidence": "EXTRACTED"}, {"from": "readme_balance_neto_energia", "to": "src_modules_menu_mostrar_resultados", "label": "implements", "title": "implements [INFERRED]", "dashes": true, "width": 1, "color": {"opacity": 0.35}, "confidence": "INFERRED"}, {"from": "src_modules_ajuste", "to": "src_modules_utils_formatear_a_fraccion", "label": "imports", "title": "imports [EXTRACTED]", "dashes": false, "width": 2, "color": {"opacity": 0.7}, "confidence": "EXTRACTED"}, {"from": "src_modules_menu", "to": "src_modules_utils_formatear_a_fraccion", "label": "imports", "title": "imports [EXTRACTED]", "dashes": false, "width": 2, "color": {"opacity": 0.7}, "confidence": "EXTRACTED"}, {"from": "src_modules_montante", "to": "src_modules_utils_formatear_a_fraccion", "label": "imports", "title": "imports [EXTRACTED]", "dashes": false, "width": 2, "color": {"opacity": 0.7}, "confidence": "EXTRACTED"}, {"from": "src_modules_utils", "to": "src_modules_utils_formatear_a_fraccion", "label": "contains", "title": "contains [EXTRACTED]", "dashes": false, "width": 2, "color": {"opacity": 0.7}, "confidence": "EXTRACTED"}, {"from": "src_modules_utils_rationale_8", "to": "src_modules_utils_formatear_a_fraccion", "label": "rationale_for", "title": "rationale_for [EXTRACTED]", "dashes": false, "width": 2, "color": {"opacity": 0.7}, "confidence": "EXTRACTED"}, {"from": "readme_reutilizacion_proyecto_1", "to": "src_modules_utils_formatear_a_fraccion", "label": "references", "title": "references [EXTRACTED]", "dashes": false, "width": 2, "color": {"opacity": 0.7}, "confidence": "EXTRACTED"}, {"from": "src_modules_menu_ingresar_mediciones", "to": "src_modules_utils_leer_fraccion", "label": "calls", "title": "calls [EXTRACTED]", "dashes": false, "width": 2, "color": {"opacity": 0.7}, "confidence": "EXTRACTED"}, {"from": "src_modules_menu", "to": "src_modules_menu_ingresar_mediciones", "label": "contains", "title": "contains [EXTRACTED]", "dashes": false, "width": 2, "color": {"opacity": 0.7}, "confidence": "EXTRACTED"}, {"from": "src_modules_menu_rationale_28", "to": "src_modules_menu_ingresar_mediciones", "label": "rationale_for", "title": "rationale_for [EXTRACTED]", "dashes": false, "width": 2, "color": {"opacity": 0.7}, "confidence": "EXTRACTED"}, {"from": "readme_convencion_signo_potencia", "to": "src_modules_menu_ingresar_mediciones", "label": "shares_data_with", "title": "shares_data_with [INFERRED]", "dashes": true, "width": 1, "color": {"opacity": 0.35}, "confidence": "INFERRED"}, {"from": "src_modules_utils_leer_fraccion", "to": "src_modules_utils_obtener_numero", "label": "calls", "title": "calls [EXTRACTED]", "dashes": false, "width": 2, "color": {"opacity": 0.7}, "confidence": "EXTRACTED"}, {"from": "src_modules_menu", "to": "src_modules_utils_leer_fraccion", "label": "imports", "title": "imports [EXTRACTED]", "dashes": false, "width": 2, "color": {"opacity": 0.7}, "confidence": "EXTRACTED"}, {"from": "src_modules_utils", "to": "src_modules_utils_leer_fraccion", "label": "contains", "title": "contains [EXTRACTED]", "dashes": false, "width": 2, "color": {"opacity": 0.7}, "confidence": "EXTRACTED"}, {"from": "src_modules_utils_rationale_49", "to": "src_modules_utils_leer_fraccion", "label": "rationale_for", "title": "rationale_for [EXTRACTED]", "dashes": false, "width": 2, "color": {"opacity": 0.7}, "confidence": "EXTRACTED"}, {"from": "readme_reutilizacion_proyecto_1", "to": "src_modules_utils_leer_fraccion", "label": "references", "title": "references [EXTRACTED]", "dashes": false, "width": 2, "color": {"opacity": 0.7}, "confidence": "EXTRACTED"}, {"from": "src_modules_utils", "to": "src_modules_utils_obtener_numero", "label": "contains", "title": "contains [EXTRACTED]", "dashes": false, "width": 2, "color": {"opacity": 0.7}, "confidence": "EXTRACTED"}, {"from": "src_modules_utils_rationale_14", "to": "src_modules_utils_obtener_numero", "label": "rationale_for", "title": "rationale_for [EXTRACTED]", "dashes": false, "width": 2, "color": {"opacity": 0.7}, "confidence": "EXTRACTED"}, {"from": "src_modules_utils", "to": "os", "label": "imports", "title": "imports [EXTRACTED]", "dashes": false, "width": 2, "color": {"opacity": 0.7}, "confidence": "EXTRACTED"}, {"from": "src_modules_utils", "to": "sys", "label": "imports", "title": "imports [EXTRACTED]", "dashes": false, "width": 2, "color": {"opacity": 0.7}, "confidence": "EXTRACTED"}, {"from": "src_modules_ajuste", "to": "src_modules_utils", "label": "imports_from", "title": "imports_from [EXTRACTED]", "dashes": false, "width": 2, "color": {"opacity": 0.7}, "confidence": "EXTRACTED"}, {"from": "src_modules_menu", "to": "src_modules_utils", "label": "imports_from", "title": "imports_from [EXTRACTED]", "dashes": false, "width": 2, "color": {"opacity": 0.7}, "confidence": "EXTRACTED"}, {"from": "src_modules_montante", "to": "src_modules_utils", "label": "imports_from", "title": "imports_from [EXTRACTED]", "dashes": false, "width": 2, "color": {"opacity": 0.7}, "confidence": "EXTRACTED"}, {"from": "src_modules_utils", "to": "decimal", "label": "imports_from", "title": "imports_from [EXTRACTED]", "dashes": false, "width": 2, "color": {"opacity": 0.7}, "confidence": "EXTRACTED"}, {"from": "src_modules_utils", "to": "fractions", "label": "imports_from", "title": "imports_from [EXTRACTED]", "dashes": false, "width": 2, "color": {"opacity": 0.7}, "confidence": "EXTRACTED"}, {"from": "src_modules_ajuste", "to": "src_modules_montante", "label": "imports_from", "title": "imports_from [EXTRACTED]", "dashes": false, "width": 2, "color": {"opacity": 0.7}, "confidence": "EXTRACTED"}, {"from": "src_modules_menu", "to": "src_modules_montante", "label": "imports_from", "title": "imports_from [EXTRACTED]", "dashes": false, "width": 2, "color": {"opacity": 0.7}, "confidence": "EXTRACTED"}, {"from": "src_modules_montante", "to": "fractions", "label": "imports_from", "title": "imports_from [EXTRACTED]", "dashes": false, "width": 2, "color": {"opacity": 0.7}, "confidence": "EXTRACTED"}, {"from": "src_modules_integracion", "to": "fractions", "label": "imports_from", "title": "imports_from [EXTRACTED]", "dashes": false, "width": 2, "color": {"opacity": 0.7}, "confidence": "EXTRACTED"}, {"from": "src_modules_menu", "to": "src_modules_integracion", "label": "imports_from", "title": "imports_from [EXTRACTED]", "dashes": false, "width": 2, "color": {"opacity": 0.7}, "confidence": "EXTRACTED"}, {"from": "src_modules_integracion_rationale_1", "to": "src_modules_integracion", "label": "rationale_for", "title": "rationale_for [EXTRACTED]", "dashes": false, "width": 2, "color": {"opacity": 0.7}, "confidence": "EXTRACTED"}, {"from": "src_main", "to": "src_modules_menu", "label": "imports_from", "title": "imports_from [EXTRACTED]", "dashes": false, "width": 2, "color": {"opacity": 0.7}, "confidence": "EXTRACTED"}, {"from": "src_modules_menu", "to": "fractions", "label": "imports_from", "title": "imports_from [EXTRACTED]", "dashes": false, "width": 2, "color": {"opacity": 0.7}, "confidence": "EXTRACTED"}, {"from": "src_modules_menu", "to": "src_modules_ajuste", "label": "imports_from", "title": "imports_from [EXTRACTED]", "dashes": false, "width": 2, "color": {"opacity": 0.7}, "confidence": "EXTRACTED"}, {"from": "src_modules_menu_rationale_1", "to": "src_modules_menu", "label": "rationale_for", "title": "rationale_for [EXTRACTED]", "dashes": false, "width": 2, "color": {"opacity": 0.7}, "confidence": "EXTRACTED"}, {"from": "src_modules_ajuste", "to": "fractions", "label": "imports_from", "title": "imports_from [EXTRACTED]", "dashes": false, "width": 2, "color": {"opacity": 0.7}, "confidence": "EXTRACTED"}, {"from": "src_modules_ajuste_rationale_1", "to": "src_modules_ajuste", "label": "rationale_for", "title": "rationale_for [EXTRACTED]", "dashes": false, "width": 2, "color": {"opacity": 0.7}, "confidence": "EXTRACTED"}, {"from": "exec", "to": "exec_sh__entry", "label": "contains", "title": "contains [EXTRACTED]", "dashes": false, "width": 2, "color": {"opacity": 0.7}, "confidence": "EXTRACTED"}, {"from": "exec_sh__entry", "to": "src_main", "label": "invokes", "title": "invokes [INFERRED]", "dashes": true, "width": 1, "color": {"opacity": 0.35}, "confidence": "INFERRED"}, {"from": "src_modules_init_rationale_1", "to": "src_modules_init", "label": "rationale_for", "title": "rationale_for [EXTRACTED]", "dashes": false, "width": 2, "color": {"opacity": 0.7}, "confidence": "EXTRACTED"}, {"from": "readme_interpolacion_polinomial", "to": "readme_extrapolacion_estimacion", "label": "conceptually_related_to", "title": "conceptually_related_to [INFERRED]", "dashes": true, "width": 1, "color": {"opacity": 0.35}, "confidence": "INFERRED"}, {"from": "readme_interpolacion_polinomial", "to": "readme_fenomeno_runge", "label": "conceptually_related_to", "title": "conceptually_related_to [EXTRACTED]", "dashes": false, "width": 2, "color": {"opacity": 0.7}, "confidence": "EXTRACTED"}, {"from": "readme_interpolacion_polinomial", "to": "readme_sistema_vandermonde", "label": "conceptually_related_to", "title": "conceptually_related_to [EXTRACTED]", "dashes": false, "width": 2, "color": {"opacity": 0.7}, "confidence": "EXTRACTED"}, {"from": "readme_interpolacion_polinomial", "to": "readme_aritmetica_exacta_fraction", "label": "conceptually_related_to", "title": "conceptually_related_to [INFERRED]", "dashes": true, "width": 1, "color": {"opacity": 0.35}, "confidence": "INFERRED"}, {"from": "readme_sistema_vandermonde", "to": "readme_metodo_montante", "label": "references", "title": "references [EXTRACTED]", "dashes": false, "width": 2, "color": {"opacity": 0.7}, "confidence": "EXTRACTED"}, {"from": "readme_balance_neto_energia", "to": "readme_regla_trapecio_compuesta", "label": "references", "title": "references [EXTRACTED]", "dashes": false, "width": 2, "color": {"opacity": 0.7}, "confidence": "EXTRACTED"}];
+const LEGEND = [{"cid": 0, "color": "#4E79A7", "label": "Consola y utilidades de E/S", "count": 15}, {"cid": 1, "color": "#F28E2B", "label": "Interpolaci\u00f3n polinomial (Vandermonde)", "count": 15}, {"cid": 2, "color": "#E15759", "label": "M\u00e9todo de Montante", "count": 14}, {"cid": 3, "color": "#76B7B2", "label": "Integraci\u00f3n por trapecios", "count": 13}, {"cid": 4, "color": "#59A14F", "label": "Presentaci\u00f3n de resultados", "count": 8}, {"cid": 5, "color": "#EDC948", "label": "Entrada de mediciones", "count": 7}, {"cid": 6, "color": "#B07AA1", "label": "Entrada y ejecuci\u00f3n", "count": 3}, {"cid": 7, "color": "#FF9DA7", "label": "Paquete de m\u00f3dulos", "count": 2}];
+
+// HTML-escape helper — prevents XSS when injecting graph data into innerHTML
+function esc(s) {
+  return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
+}
+
+// Build vis datasets
+const nodesDS = new vis.DataSet(RAW_NODES.map((n, i) => ({
+  id: n.id, label: n.label, color: n.color, size: n.size,
+  font: n.font, title: n.title,
+  // Fermat/golden-angle spiral seed positions (#3699): spreading nodes out
+  // before physics runs keeps avoidOverlap from computing near-zero-distance
+  // repulsion that blows the BarnesHut recursion into a stack overflow on large
+  // graphs. `i` is the map index — physics still settles small graphs identically.
+  x: 30 * Math.sqrt(i) * Math.cos(i * 2.4),
+  y: 30 * Math.sqrt(i) * Math.sin(i * 2.4),
+  community: n.community, community_name: n.community_name,
+  source_file: n.source_file, file_type: n.file_type, degree: n.degree,
+  member_count: n.member_count,
+})));
+
+const edgesDS = new vis.DataSet(RAW_EDGES.map((e, i) => ({
+  id: i, from: e.from, to: e.to,
+  label: '',
+  title: e.title,
+  dashes: e.dashes,
+  width: e.width,
+  color: e.color,
+  arrows: { to: { enabled: true, scaleFactor: 0.5 } },
+})));
+
+const container = document.getElementById('graph');
+const network = new vis.Network(container, { nodes: nodesDS, edges: edgesDS }, {
+  physics: {
+    enabled: true,
+    solver: 'forceAtlas2Based',
+    forceAtlas2Based: {
+      gravitationalConstant: -60,
+      centralGravity: 0.005,
+      springLength: 120,
+      springConstant: 0.08,
+      damping: 0.4,
+      avoidOverlap: 0.8,
+    },
+    stabilization: { iterations: 200, fit: true },
+  },
+  interaction: {
+    hover: true,
+    tooltipDelay: 100,
+    hideEdgesOnDrag: true,
+    navigationButtons: false,
+    keyboard: false,
+  },
+  nodes: { shape: 'dot', borderWidth: 1.5 },
+  edges: { smooth: { type: 'continuous', roundness: 0.2 }, selectionWidth: 3 },
+});
+
+// Theme toggle (#3894): Light / Dark / System, persisted in localStorage.
+const THEME_KEY = 'graphify-theme';
+const themeMQ = window.matchMedia ? window.matchMedia('(prefers-color-scheme: light)') : null;
+let themeLabelColor = '#ffffff';  // matches the per-node font color set in Python
+function themePref() {
+  let p = null;
+  try { p = localStorage.getItem(THEME_KEY); } catch (e) {}
+  return (p === 'light' || p === 'dark' || p === 'system') ? p : null;
+}
+function applyTheme(pref) {
+  const t = pref === 'light' ? 'light' : (pref === 'system' && themeMQ && themeMQ.matches) ? 'light' : 'dark';
+  const root = document.documentElement;
+  if (!root) return;
+  root.setAttribute('data-theme', t);
+  document.querySelectorAll('[data-theme-choice]').forEach(b => {
+    b.setAttribute('aria-pressed', String(b.dataset.themeChoice === (pref || 'dark')));
+  });
+  const labelColor = getComputedStyle(root).getPropertyValue('--node-label').trim();
+  if (labelColor && labelColor !== themeLabelColor) {
+    themeLabelColor = labelColor;
+    nodesDS.update(nodesDS.get().map(n => ({ id: n.id, font: Object.assign({}, n.font, { color: labelColor }) })));
+  }
+}
+document.querySelectorAll('[data-theme-choice]').forEach(b => {
+  b.addEventListener('click', () => {
+    const pref = b.dataset.themeChoice;
+    try { localStorage.setItem(THEME_KEY, pref); } catch (e) {}
+    applyTheme(pref);
+  });
+});
+if (themeMQ) {
+  const onSchemeChange = () => { if (themePref() === 'system') applyTheme('system'); };
+  if (themeMQ.addEventListener) themeMQ.addEventListener('change', onSchemeChange);
+  else if (themeMQ.addListener) themeMQ.addListener(onSchemeChange);
+}
+applyTheme(themePref());
+
+network.once('stabilizationIterationsDone', () => {
+  network.setOptions({ physics: { enabled: false } });
+});
+
+function showInfo(nodeId) {
+  const n = nodesDS.get(nodeId);
+  if (!n) return;
+  const neighborIds = network.getConnectedNodes(nodeId);
+  const neighborItems = neighborIds.map(nid => {
+    const nb = nodesDS.get(nid);
+    const color = nb ? nb.color.background : '#555';
+    return `<span class="neighbor-link" style="border-left-color:${esc(color)}" data-nid="${esc(nid)}">${esc(nb ? nb.label : nid)}</span>`;
+  }).join('');
+  const isMetaNode = !n.file_type && !n.source_file;
+  let html = `<div class="field"><b>${esc(n.label)}</b></div>`;
+  if (!isMetaNode) {
+    html += `<div class="field">Type: ${esc(n.file_type || 'unknown')}</div>`;
+  }
+  html += `<div class="field">Community: ${esc(n.community_name || '')}</div>`;
+  if (!isMetaNode) {
+    html += `<div class="field">Source: ${esc(n.source_file || '-')}</div>`;
+  } else if (n.member_count !== undefined && n.member_count !== null) {
+    html += `<div class="field">Members: ${esc(n.member_count)}</div>`;
+  }
+  html += `<div class="field">Degree: ${n.degree}</div>`;
+  if (neighborIds.length) {
+    html += `<div class="field" style="margin-top:8px;color:var(--text-2);font-size:11px">Neighbors (${neighborIds.length})</div><div id="neighbors-list">${neighborItems}</div>`;
+  }
+  document.getElementById('info-content').innerHTML = html;
+}
+
+function focusNode(nodeId) {
+  network.focus(nodeId, { scale: 1.4, animation: true });
+  network.selectNodes([nodeId]);
+  showInfo(nodeId);
+}
+
+// Neighbor links use a data attribute + one delegated listener rather than an
+// inline onclick. A node id/label sourced from a document or a scraped URL
+// (graphify add) can contain a double-quote; dropping the stringified id
+// unescaped into a quoted onclick both broke every link and allowed a hostile
+// source to inject an event handler into the local report (stored XSS, #1838).
+// esc() on data-nid keeps the value inside the attribute; the listener reads it
+// back verbatim. Bound to document so it survives the innerHTML rebuild that
+// recreates #neighbors-list on each showInfo().
+document.addEventListener('click', e => {
+  const el = e.target.closest('.neighbor-link');
+  if (el && el.dataset.nid !== undefined) focusNode(el.dataset.nid);
+});
+
+// Sidebar tooltips reuse vis-network's .vis-tooltip style and 100ms tooltipDelay.
+// Names get one only when CSS ellipsis truncates them (the full text is still in
+// the DOM); counts always get one, to say what the number is. Text is set with
+// textContent only (labels are untrusted). Delegated on document so rows rebuilt
+// later (search results, showInfo()) are covered.
+const sidebarTip = document.createElement('div');
+sidebarTip.className = 'vis-tooltip';
+sidebarTip.style.cssText = 'white-space: normal; max-width: 360px; overflow-wrap: break-word;';
+document.body.appendChild(sidebarTip);
+let sidebarTipTimer = null;
+let sidebarTipEl = null;    // element whose text the tooltip shows
+let sidebarTipZone = null;  // element the pointer must leave to hide it
+function hideSidebarTip() {
+  clearTimeout(sidebarTipTimer);
+  sidebarTip.style.visibility = 'hidden';
+  sidebarTip.textContent = '';
+  sidebarTipEl = sidebarTipZone = null;
+}
+document.addEventListener('mouseover', e => {
+  const zone = e.target.closest && e.target.closest('.legend-count, .legend-item, .search-item, .neighbor-link');
+  // Anywhere on a legend row except its count (dot, checkbox, gaps, padding)
+  // stands for the row's name, so moving within the row never re-triggers it.
+  const el = zone && zone.classList.contains('legend-item') ? zone.querySelector('.legend-label') : zone;
+  if (!el || el === sidebarTipEl) return;
+  hideSidebarTip();
+  const isCount = el.classList.contains('legend-count');
+  if (!isCount && el.scrollWidth <= el.clientWidth) return;
+  const text = isCount ? `${el.textContent} ${el.textContent === '1' ? 'node' : 'nodes'}` : el.textContent;
+  sidebarTipEl = el;
+  sidebarTipZone = zone;
+  const x = e.clientX, y = e.clientY;
+  sidebarTipTimer = setTimeout(() => {
+    sidebarTip.textContent = text;
+    sidebarTip.style.left = sidebarTip.style.top = '0px';  // measure at full max-width
+    sidebarTip.style.visibility = 'visible';
+    const w = sidebarTip.offsetWidth, h = sidebarTip.offsetHeight;
+    sidebarTip.style.left = Math.max(4, Math.min(x + 12, window.innerWidth - w - 4)) + 'px';
+    sidebarTip.style.top = (y + 16 + h > window.innerHeight ? Math.max(4, y - h - 8) : y + 16) + 'px';
+  }, 100);
+});
+document.addEventListener('mouseout', e => {
+  if (sidebarTipZone && !sidebarTipZone.contains(e.relatedTarget)) hideSidebarTip();
+});
+// A click rebuilds or hides the row (showInfo(), search pick) without a mouseout.
+document.addEventListener('mousedown', hideSidebarTip);
+
+// Track hovered node — hover detection is more reliable than click params
+let hoveredNodeId = null;
+network.on('hoverNode', params => {
+  hoveredNodeId = params.node;
+  container.style.cursor = 'pointer';
+});
+network.on('blurNode', () => {
+  hoveredNodeId = null;
+  container.style.cursor = 'default';
+});
+container.addEventListener('click', () => {
+  if (hoveredNodeId !== null) {
+    showInfo(hoveredNodeId);
+    network.selectNodes([hoveredNodeId]);
+  }
+});
+network.on('click', params => {
+  if (params.nodes.length > 0) {
+    showInfo(params.nodes[0]);
+  } else if (hoveredNodeId === null) {
+    document.getElementById('info-content').innerHTML = '<span class="empty">Click a node to inspect it</span>';
+  }
+});
+
+const searchInput = document.getElementById('search');
+const searchResults = document.getElementById('search-results');
+searchInput.addEventListener('input', () => {
+  const q = searchInput.value.toLowerCase().trim();
+  searchResults.innerHTML = '';
+  if (!q) { searchResults.style.display = 'none'; return; }
+  const matches = RAW_NODES.filter(n => n.label.toLowerCase().includes(q)).slice(0, 20);
+  if (!matches.length) { searchResults.style.display = 'none'; return; }
+  searchResults.style.display = 'block';
+  matches.forEach(n => {
+    const el = document.createElement('div');
+    el.className = 'search-item';
+    el.textContent = n.label;
+    el.style.borderLeft = `3px solid ${n.color.background}`;
+    el.style.paddingLeft = '8px';
+    el.onclick = () => {
+      network.focus(n.id, { scale: 1.5, animation: true });
+      network.selectNodes([n.id]);
+      showInfo(n.id);
+      searchResults.style.display = 'none';
+      searchInput.value = '';
+    };
+    searchResults.appendChild(el);
+  });
+});
+document.addEventListener('click', e => {
+  if (!searchResults.contains(e.target) && e.target !== searchInput)
+    searchResults.style.display = 'none';
+});
+
+const hiddenCommunities = new Set();
+
+const selectAllCb = document.getElementById('select-all-cb');
+
+function updateSelectAllState() {
+  const total = LEGEND.length;
+  const hidden = hiddenCommunities.size;
+  selectAllCb.checked = hidden === 0;
+  selectAllCb.indeterminate = hidden > 0 && hidden < total;
+}
+
+function toggleAllCommunities(hide) {
+  document.querySelectorAll('.legend-item').forEach(item => {
+    hide ? item.classList.add('dimmed') : item.classList.remove('dimmed');
+  });
+  document.querySelectorAll('.legend-cb').forEach(cb => {
+    cb.checked = !hide;
+  });
+  LEGEND.forEach(c => {
+    if (hide) hiddenCommunities.add(c.cid); else hiddenCommunities.delete(c.cid);
+  });
+  const updates = RAW_NODES.map(n => ({ id: n.id, hidden: hide }));
+  nodesDS.update(updates);
+  updateSelectAllState();
+}
+
+const legendEl = document.getElementById('legend');
+LEGEND.forEach(c => {
+  const item = document.createElement('div');
+  item.className = 'legend-item';
+  const cb = document.createElement('input');
+  cb.type = 'checkbox';
+  cb.className = 'legend-cb';
+  cb.checked = true;
+  cb.addEventListener('change', (e) => {
+    e.stopPropagation();
+    if (cb.checked) {
+      hiddenCommunities.delete(c.cid);
+      item.classList.remove('dimmed');
+    } else {
+      hiddenCommunities.add(c.cid);
+      item.classList.add('dimmed');
+    }
+    const updates = RAW_NODES
+      .filter(n => n.community === c.cid)
+      .map(n => ({ id: n.id, hidden: !cb.checked }));
+    nodesDS.update(updates);
+    updateSelectAllState();
+  });
+  item.innerHTML = `<div class="legend-dot" style="background:${c.color}"></div>
+    <span class="legend-label">${c.label}</span>
+    <span class="legend-count">${c.count}</span>`;
+  item.prepend(cb);
+  item.onclick = (e) => {
+    if (e.target === cb) return;
+    cb.checked = !cb.checked;
+    cb.dispatchEvent(new Event('change'));
+  };
+  legendEl.appendChild(item);
+});
+</script>
+<script>
+// Render hyperedges as shaded regions
+const hyperedges = [{"id": "utils_reutilizados_proyecto_1", "label": "Funciones reutilizadas del Proyecto 1 en utils.py", "nodes": ["src_modules_utils_leer_int", "src_modules_utils_leer_fraccion", "src_modules_utils_leer_opcion", "src_modules_utils_formatear_a_fraccion", "src_modules_utils_formatear_a_decimal", "src_modules_utils_borrar_consola", "src_modules_utils_pausar"], "relation": "participate_in", "confidence": "EXTRACTED", "confidence_score": 1.0, "source_file": "README.md"}, {"id": "flow_balance_energia_dia", "label": "Flujo de c\u00e1lculo del balance de energ\u00eda diario", "nodes": ["src_modules_menu_ingresar_mediciones", "src_modules_ajuste_construir_sistema", "src_modules_ajuste_resolver_coeficientes", "src_modules_integracion_regla_del_trapecio", "src_modules_menu_mostrar_resultados"], "relation": "form", "confidence": "INFERRED", "confidence_score": 0.85, "source_file": "README.md"}, {"id": "nucleo_metodo_montante", "label": "N\u00facleo del m\u00e9todo de Montante", "nodes": ["src_modules_montante_hallar_pivote", "src_modules_montante_eliminacion_montante", "src_modules_montante_resolver_sistema", "src_modules_montante_mostrar_matriz"], "relation": "form", "confidence": "INFERRED", "confidence_score": 0.85, "source_file": "README.md"}];
+// afterDrawing passes ctx already transformed to network coordinate space.
+// Draw node positions raw — no manual pan/zoom/DPR math needed.
+
+// Andrew's monotone chain. Returns the hull in counter-clockwise order, which
+// is what the perimeter must be traced in. Collinear and duplicate points
+// collapse to the extremes, so degenerate member sets render as a segment
+// rather than a zero-area crossed path.
+function convexHull(pts) {
+    const p = pts.slice().sort((a, b) => (a.x - b.x) || (a.y - b.y));
+    if (p.length < 3) return p;
+    const cross = (o, a, b) => (a.x - o.x) * (b.y - o.y) - (a.y - o.y) * (b.x - o.x);
+    const build = seq => {
+        const out = [];
+        for (const q of seq) {
+            while (out.length >= 2 && cross(out[out.length - 2], out[out.length - 1], q) <= 0) out.pop();
+            out.push(q);
+        }
+        out.pop();
+        return out;
+    };
+    const hull = build(p).concat(build(p.slice().reverse()));
+    return hull.length >= 3 ? hull : p;
+}
+network.on('afterDrawing', function(ctx) {
+    hyperedges.forEach(h => {
+        const positions = h.nodes
+            .map(nid => network.getPositions([nid])[nid])
+            .filter(p => p !== undefined);
+        if (positions.length < 2) return;
+        ctx.save();
+        ctx.globalAlpha = 0.12;
+        ctx.fillStyle = '#6366f1';
+        ctx.strokeStyle = '#6366f1';
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        // Centroid and expanded hull in network coordinates.
+        // The perimeter must follow hull order, not h.nodes order: tracing the
+        // raw member order self-intersects whenever the layout does not happen
+        // to place members in angular order, filling as crossed wedges.
+        const cx = positions.reduce((s, p) => s + p.x, 0) / positions.length;
+        const cy = positions.reduce((s, p) => s + p.y, 0) / positions.length;
+        const hull = convexHull(positions);
+        const expanded = hull.map(p => ({
+            x: cx + (p.x - cx) * 1.15,
+            y: cy + (p.y - cy) * 1.15
+        }));
+        ctx.moveTo(expanded[0].x, expanded[0].y);
+        expanded.slice(1).forEach(p => ctx.lineTo(p.x, p.y));
+        ctx.closePath();
+        ctx.fill();
+        ctx.globalAlpha = 0.4;
+        ctx.stroke();
+        // Label
+        ctx.globalAlpha = 0.8;
+        ctx.fillStyle = '#4f46e5';
+        ctx.font = 'bold 11px sans-serif';
+        ctx.textAlign = 'center';
+        ctx.fillText(h.label, cx, cy - 5);
+        ctx.restore();
+    });
+});
+</script>
+</body>
+</html>
