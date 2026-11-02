@@ -1,16 +1,45 @@
 # PIA-Data-Center-Bateries-Administratrion
-SmartGrid UPS Analytics: Control de Flujo de Potencia y Balance Energético en Data CenterSoftware de análisis e infraestructura diseñado para calcular la ecuación del flujo de potencia continua y evaluar el balance energético neto en el sistema de almacenamiento de energía (UPS / Banco de Baterías) de un centro de datos.🏗️ Arquitectura del Pipeline NuméricoEl sistema procesa los registros de flujo eléctrico en dos etapas secuenciales basadas en métodos numéricos exactos:Obtención de la Función de Flujo de Potencia ($f(t)$):A partir de mediciones tomadas por sensores en instantes clave del día (potencia en $\text{kW}$ vs. tiempo en horas), se plantea un sistema de ecuaciones polinómicas mediante una matriz de Vandermonde.Se aplica el Método de Montante para resolver el sistema de ecuaciones de manera exacta con aritmética entera. Esto evita el arrastre de errores por punto flotante y procesa sin problemas valores mixtos:$f(t) > 0$ (Positivo): Red alimentando/cargando el sistema de baterías (Superávit).$f(t) < 0$ (Negativo): Baterías suministrando energía por picos de demanda o caída de red (Déficit/Descarga).Cálculo del Balance Neto de Energía ($\text{kWh}$):Utilizando la función polinómica $f(t)$ resultante, se determina el consumo o ganancia neta acumulada en un intervalo $[t_1, t_2]$ mediante integración definida:
-$$\text{Balance de Energía} = \int_{t_1}^{t_2} f(t) \, dt$$Se aplica Integración Numérica (Regla de Simpson 1/3 / Trapecio) para evaluar el área neta con signo, donde las zonas de descarga restan y las de carga suman automáticamente al balance total.🛠️ Tecnologías y MétodosLenguaje: Python 3.xÁlgebra Lineal: Algoritmo de Montante (Determinantes para matriz de Vandermonde).Cálculo Numérico: Regla de Simpson 1/3 Compuesta y Método del Trapecio.Dominio: Gestión de energía en TI y sistemas críticos.🚀 Uso Rápidofrom ups_analytics import UPSPowerModel
+# SmartGrid UPS Flow: Control de Flujo de Potencia y Balance de Baterías
 
-# 1. Cargar mediciones de los sensores: (tiempo en horas, potencia neta en kW)
-# Valores positivos = Carga, Valores negativos = Descarga
-mediciones = [(2, 40.0), (6, -25.0), (10, 10.0)]
+Software de análisis de infraestructura diseñado para automatizar el cálculo del balance neto de energía en sistemas de respaldo (UPS) de centros de datos, procesando registros de potencia variable (positivos y negativos) a lo largo del tiempo.
 
-# 2. Obtener la ecuación continua f(t) mediante el Método de Montante
-modelo = UPSPowerModel(mediciones)
-coeficientes = modelo.resolver_montante()  # Devuelve a, b, c para f(t) = at² + bt + c
+---
 
-# 3. Calcular el balance neto de energía (kWh) en un rango mediante Integración Numérica
-energia_neta = modelo.calcular_integral(t_inicio=0, t_fin=12, metodo="simpson_13")
-print(f"Balance energético neto del periodo: {energia_neta:.2f} kWh")
+## 🏗️ Arquitectura del Pipeline Numérico
 
+El sistema procesa la información en dos etapas secuenciales basadas en métodos numéricos exactos y eficientes:
+
+1. **Obtención de la Función de Potencia ($f(t)$):**
+   * A partir de $n$ puntos de datos obtenidos por sensores de monitoreo de potencia neta en kilovatios ($\text{kW}$) —donde los valores positivos indican carga o consumo de red y los negativos indican descarga del banco de baterías—, se plantea un sistema de ecuaciones polinómicas.
+   * Se aplica el **Método de Montante** para resolver el sistema lineal de manera exacta, evitando errores de punto flotante y manejando con precisión coeficientes con valores mixtos.
+
+2. **Cálculo Integral del Balance Neto de Energía:**
+   * Utilizando la función continua $f(t)$ obtenida en la fase anterior, se calcula el acumulado neto de energía en un intervalo de tiempo $[t_1, t_2]$:
+     $$\text{Energía Neta} = \int_{t_1}^{t_2} f(t) \, dt$$
+   * Se implementan algoritmos de **Integración Numérica** (Regla del Trapecio o Simpson 1/3) para aproximar el área neta bajo la curva, integrando de forma natural los cambios de signo (las áreas superiores suman energía al sistema y las inferiores restan reservas).
+
+---
+
+## 🛠️ Tecnologías y Métodos
+* **Lenguaje:** Python 3.x
+* **Matemática Aplicada:** Álgebra lineal exacta (Algoritmo de Montante) y cálculo numérico (Integración definida con signo).
+* **Paradigmas:** Programación modular orientada al análisis de infraestructura crítica.
+
+---
+
+## 🚀 Uso Rápido
+
+```python
+# Ejemplo de inicialización del pipeline analítico
+from smartgrid_ups import UPSFlowModel
+
+# 1. Cargar mediciones de sensores (tiempo en horas, potencia en kW - positivo/negativo)
+puntos = [(2, 40.0), (6, -25.0), (10, 10.0)]
+
+# 2. Resolver coeficientes mediante el Método de Montante
+modelo = UPSFlowModel(puntos)
+funcion_potencia = modelo.resolver_montante()
+
+# 3. Calcular el balance neto de energía mediante integración numérica
+energia_neta = modelo.calcular_integral(t_inicio=0, t_end=12, metodo="simpson_13")
+print(f"Balance neto de energía: {energia_neta} kWh")
