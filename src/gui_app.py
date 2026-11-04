@@ -32,6 +32,22 @@ def parse_fraction(texto: str) -> Fraction:
         raise ValueError(f'"{valor}" no es un número válido.') from exc
 
 
+def validar_puntos(puntos):
+    """Valida que los datos de entrada sean consistentes antes del cálculo."""
+    if len(puntos) < 3:
+        raise ValueError("Se requieren al menos 3 mediciones para calcular el balance.")
+
+    horas = [hora for hora, _ in puntos]
+    if len(set(horas)) != len(horas):
+        raise ValueError("No pueden existir dos mediciones con la misma hora.")
+
+    for hora, potencia in puntos:
+        if not 0 <= int(hora) <= 23:
+            raise ValueError("Cada hora debe estar entre 0 y 23.")
+        if potencia == 0:
+            continue
+
+
 class BatteryEnergyApp(ctk.CTk):
     def __init__(self):
         super().__init__()
@@ -283,16 +299,48 @@ class BatteryEnergyApp(ctk.CTk):
         )
         self.summary_label.grid(row=0, column=1, rowspan=2, sticky="e", padx=18, pady=(18, 12))
 
-        self.result_text = ctk.CTkTextbox(
+        result_card = ctk.CTkFrame(
             parent,
+            fg_color="#0d1a2a",
+            corner_radius=20,
+            border_width=1,
+            border_color="#243750",
+        )
+        result_card.grid(row=2, column=0, sticky="nsew", padx=18, pady=(0, 18))
+        result_card.grid_columnconfigure(0, weight=1)
+        result_card.grid_rowconfigure(1, weight=1)
+
+        result_header = ctk.CTkFrame(result_card, fg_color="transparent")
+        result_header.grid(row=0, column=0, sticky="ew", padx=18, pady=(16, 10))
+        result_header.grid_columnconfigure(0, weight=1)
+
+        ctk.CTkLabel(
+            result_header,
+            text="Detalle del cálculo",
+            font=ctk.CTkFont(size=18, weight="bold"),
+            text_color="#edf6ff",
+            anchor="w",
+        ).grid(row=0, column=0, sticky="w")
+
+        ctk.CTkLabel(
+            result_header,
+            text="Salida técnica",
+            font=ctk.CTkFont(size=12),
+            text_color="#8ec5ff",
+            anchor="e",
+        ).grid(row=0, column=1, sticky="e")
+
+        self.result_text = ctk.CTkTextbox(
+            result_card,
             width=500,
             height=420,
-            fg_color="#0c1728",
-            border_color="#21344b",
+            fg_color="#081822",
+            border_color="#1b3047",
             corner_radius=18,
             font=ctk.CTkFont(size=12),
+            text_color="#dfeafd",
         )
-        self.result_text.grid(row=2, column=0, sticky="nsew", padx=18, pady=(0, 18))
+        self.result_text.grid(row=1, column=0, sticky="nsew", padx=18, pady=(0, 18))
         self.result_text.insert("0.0", "Aquí aparecerán los coeficientes, la función ajustada, el ancho de cada trapecio y la interpretación del balance.")
         self.result_text.configure(state="disabled")
 
@@ -382,8 +430,8 @@ class BatteryEnergyApp(ctk.CTk):
         self.status_label.configure(text="Se limpiaron todas las mediciones.", text_color="#93c5fd")
 
     def _calcular(self):
-        if len(self.points) < 2:
-            self.status_label.configure(text="Debes agregar al menos dos mediciones distintas.", text_color="#fca5a5")
+        if len(self.points) < 3:
+            self.status_label.configure(text="Se requieren al menos 3 mediciones para poder calcular.", text_color="#fca5a5")
             return
 
         try:
@@ -395,6 +443,7 @@ class BatteryEnergyApp(ctk.CTk):
             return
 
         try:
+            validar_puntos(self.points)
             matriz = construir_sistema(self.points)
             coeficientes = resolver_coeficientes(matriz)
             energia = regla_del_trapecio(

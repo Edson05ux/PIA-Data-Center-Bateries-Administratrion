@@ -30,10 +30,10 @@ def _ingresar_mediciones():
     print("Cada medición tiene una hora (0-23) y una potencia en kW.")
     print("Potencia positiva = carga (entrada); negativa = descarga (salida).\n")
 
-    cantidad = leer_int("¿Cuántas mediciones deseas ingresar? (mínimo 2): ")
-    while cantidad < 2:
-        print("Debes ingresar al menos 2 mediciones para ajustar la función.")
-        cantidad = leer_int("¿Cuántas mediciones deseas ingresar? (mínimo 2): ")
+    cantidad = leer_int("¿Cuántas mediciones deseas ingresar? (mínimo 3): ")
+    while cantidad < 3:
+        print("Debes ingresar al menos 3 mediciones para calcular el balance.")
+        cantidad = leer_int("¿Cuántas mediciones deseas ingresar? (mínimo 3): ")
 
     puntos = []
     horas_usadas = set()
